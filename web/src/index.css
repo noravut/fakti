@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+  }
+
+  /* focus ring เดียวกันทั้งแอป ตาม design doc */
+  :where(button, a, input, select, [tabindex]):focus-visible {
+    outline: 2px solid #1f5f52;
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .card {
+    @apply rounded-card border border-line bg-surface;
+  }
+}
+
+@keyframes pat-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.pat-pulse {
+  animation: pat-pulse 1.2s ease-in-out infinite;
+}
+
+.pat-skeleton {
+  animation: pat-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

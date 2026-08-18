@@ -1,0 +1,68 @@
+[
+  {
+    "id": "d-tc-1042",
+    "key": "TC-1042",
+    "title": "ลากการ์ดข้ามคอลัมน์แล้วตำแหน่งเด้งกลับที่เดิม",
+    "description": "เมื่อลากการ์ดจาก In Progress ไป Done การ์ดจะแสดงที่ตำแหน่งใหม่ประมาณครึ่งวินาที แล้วเด้งกลับไปคอลัมน์เดิม พอ refresh หน้าจอถึงจะเห็นว่าจริงๆ ย้ายสำเร็จแล้ว เกิดเฉพาะตอนที่มีผู้ใช้คนอื่นเปิดบอร์ดเดียวกันอยู่",
+    "severity": "high",
+    "status": "open",
+    "reporter": "ploy",
+    "createdAt": "2026-08-14T09:12:00+07:00",
+    "url": "https://tracker.example.com/browse/TC-1042"
+  },
+  {
+    "id": "d-tc-1051",
+    "key": "TC-1051",
+    "title": "AI task breakdown ค้างที่ loading เมื่อ title ยาวเกิน 200 ตัวอักษร",
+    "description": "กด breakdown บน task ที่ title ยาวมากแล้ว spinner หมุนค้างไม่จบ ไม่มี error ขึ้น ต้อง refresh ถึงจะกดใหม่ได้ ลองแล้วเกิดทุกครั้งที่ title เกิน 200 ตัวอักษร ถ้าสั้นกว่านั้นทำงานปกติ",
+    "severity": "medium",
+    "status": "open",
+    "reporter": "nat",
+    "createdAt": "2026-08-16T14:40:00+07:00",
+    "url": "https://tracker.example.com/browse/TC-1051"
+  },
+  {
+    "id": "d-tc-1038",
+    "key": "TC-1038",
+    "title": "export รายงานเป็น CSV แล้วคอลัมน์วันที่เพี้ยนไป 1 วัน",
+    "description": "รายงาน timesheet ที่ export ออกมาแสดงวันที่ย้อนหลังไป 1 วันจากที่เห็นในหน้าเว็บ เกิดกับผู้ใช้ที่ตั้ง timezone เป็น Asia/Bangkok ส่วนเครื่องที่ตั้งเป็น UTC ไม่เจอปัญหา",
+    "severity": "critical",
+    "status": "open",
+    "reporter": "beam",
+    "createdAt": "2026-08-11T11:05:00+07:00",
+    "url": "https://tracker.example.com/browse/TC-1038"
+  },
+  {
+    "id": "d-tc-1060",
+    "key": "TC-1060",
+    "title": "กดปุ่มบันทึกซ้ำเร็วๆ แล้วได้ record ซ้ำ 2 อัน",
+    "description": "ในหน้าสร้าง time entry ถ้าเน็ตช้าแล้วผู้ใช้กดบันทึกสองครั้ง จะได้ entry ซ้ำกันสองรายการ ปุ่มไม่ได้ถูก disable ระหว่างรอ response",
+    "severity": "medium",
+    "status": "open",
+    "reporter": "ploy",
+    "createdAt": "2026-08-17T16:22:00+07:00",
+    "url": "https://tracker.example.com/browse/TC-1060"
+  },
+  {
+    "id": "d-gw-204",
+    "key": "GW-204",
+    "title": "ตารางผลการประเมินไม่ sort ตามคอลัมน์คะแนน",
+    "description": "คลิกหัวคอลัมน์ score แล้วลูกศรเปลี่ยนทิศแต่ลำดับแถวไม่ขยับ คอลัมน์อื่น sort ได้ปกติ เดาว่าเทียบค่าแบบ string เลยจัดลำดับ 10 มาก่อน 9",
+    "severity": "low",
+    "status": "open",
+    "reporter": "nat",
+    "createdAt": "2026-08-12T10:30:00+07:00",
+    "url": "https://tracker.example.com/browse/GW-204"
+  },
+  {
+    "id": "d-gw-211",
+    "key": "GW-211",
+    "title": "อัปโหลดไฟล์แนบเกิน 10MB แล้วขึ้น error ที่อ่านไม่รู้เรื่อง",
+    "description": "อัปโหลดหลักฐานที่ไฟล์ใหญ่แล้วขึ้นข้อความ Request failed with status code 413 ผู้ใช้ไม่รู้ว่าต้องทำอะไรต่อ ควรบอกไปเลยว่าไฟล์ใหญ่เกินและจำกัดที่เท่าไหร่",
+    "severity": "low",
+    "status": "open",
+    "reporter": "beam",
+    "createdAt": "2026-08-15T13:48:00+07:00",
+    "url": "https://tracker.example.com/browse/GW-211"
+  }
+]

@@ -1,0 +1,9 @@
+packages:
+  - server
+  - web
+
+# node-pty เป็น native module ต้องให้ pnpm รัน build script ตอนติดตั้ง
+# ถ้าไม่ระบุตรงนี้ pnpm 10 จะบล็อกไว้เงียบๆ แล้วไปพังตอน runtime แทน
+onlyBuiltDependencies:
+  - node-pty
+  - esbuild
