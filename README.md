@@ -1,8 +1,8 @@
-# ปัด (pat)
+# fakti
 
 A local dev tool that hands defects to Claude Code and keeps you in control of the terminal.
 
-You pick defects in a web UI, pat creates a git branch, spawns real `claude` in a pty, and streams
+You pick defects in a web UI, fakti creates a git branch, spawns real `claude` in a pty, and streams
 it to your browser over WebSocket. You can type into that terminal exactly like a normal one —
 answer questions, interrupt with Ctrl+C, scroll history. Nothing is one-shot.
 
@@ -44,7 +44,7 @@ pnpm build
 pnpm start
 ```
 
-Then open **http://127.0.0.1:5273** — pat also tries to open your browser automatically.
+Then open **http://127.0.0.1:5273** — fakti also tries to open your browser automatically.
 
 Set `PAT_NO_OPEN=1` to stop it from doing that (useful on WSL, where `xdg-open` usually
 does nothing):
@@ -75,12 +75,12 @@ pnpm typecheck   # tsc --noEmit on both packages
 
 1. Open the app. With no repos registered you land on **Setup**.
 2. Paste the **absolute path** of a git repo on your machine, e.g. `/home/you/work/timecraft`.
-   pat validates it live and shows the remote and branch list.
+   fakti validates it live and shows the remote and branch list.
 3. Pick a base branch and a colour, then **เพิ่ม repo**.
 4. You're now on the defect list. Tick one or more defects and press **แก้ที่เลือก**.
 5. Confirm the branch name in the dialog, then **เริ่มแก้**.
 
-At step 5 pat will, on your real repo:
+At step 5 fakti will, on your real repo:
 
 - create a branch off `origin/<baseBranch>` (falling back to the local branch if there's no remote)
 - write `.pat-task.md` containing the defect details, and add it to `.git/info/exclude`
@@ -144,7 +144,7 @@ Config lives in `~/.pat/` and is meant to be edited by hand:
 | `sessions.json` | session history (latest 50) |
 | `settings.json` | active workspace, port |
 
-Every file is validated with zod on read. If one fails to parse, pat backs it up to `.bak`,
+Every file is validated with zod on read. If one fails to parse, fakti backs it up to `.bak`,
 starts from empty, and shows a warning in the web UI. It never crashes on bad config.
 Writes are atomic (write to `.tmp`, then rename).
 
@@ -152,15 +152,15 @@ Writes are atomic (write to `.tmp`, then rename).
 
 ## WSL notes
 
-pat runs inside WSL, so use **Linux paths** (`/home/you/work/repo`) — not `C:\...` or
+fakti runs inside WSL, so use **Linux paths** (`/home/you/work/repo`) — not `C:\...` or
 `\\wsl$\...`. It will tell you so if you paste a Windows path.
 
 - Your browser can be on Windows; WSL2 forwards `127.0.0.1` for you.
-- **Start pat from VS Code's integrated terminal** if you want the "เปิดใน VSCode" button to
+- **Start fakti from VS Code's integrated terminal** if you want the "เปิดใน VSCode" button to
   work. It shells out to `code`, which needs `VSCODE_IPC_HOOK_CLI` inherited from the
   environment to attach to your existing window.
 - Keep repos on the Linux filesystem. Repos under `/mnt/c/...` work but git is slow there, and
-  pat polls `git status` every 5 seconds.
+  fakti polls `git status` every 5 seconds.
 
 ---
 
@@ -168,14 +168,14 @@ pat runs inside WSL, so use **Linux paths** (`/home/you/work/repo`) — not `C:\
 
 **The prompt is delivered through a file, not typed into the pty.**
 Claude Code's TUI treats newlines as Enter, so a multi-line prompt gets split into several
-messages and the agent starts working on the first line without context. pat writes
+messages and the agent starts working on the first line without context. fakti writes
 `.pat-task.md` and sends one short line instead. The spec allows this fallback.
 
 **`Session` has an extra `createdBranch` field.**
 The spec's discard flow is `checkout - && branch -D <name>`. That is wrong when the user chose
-"continue on the current branch", because pat never created that branch — deleting it would
+"continue on the current branch", because fakti never created that branch — deleting it would
 destroy their work. `createdBranch` records who made the branch, and discard only deletes it
-when pat did. Returning to the base branch uses `workspace.baseBranch` rather than
+when fakti did. Returning to the base branch uses `workspace.baseBranch` rather than
 `checkout -`, since the reflog can move underneath you.
 
 **Endpoints added beyond the spec's table.**
@@ -212,7 +212,7 @@ Verified end to end in a real browser (Chromium via Playwright) against a real g
   raw escape sequences (Ctrl+C, arrows, Esc) passing through
 - reconnect buffer restoring scrollback after a refresh and after in-app navigation
 - diff and commit parsing, summary page totals matching `git`
-- discard deleting only pat-created branches and leaving the user's own branch intact
+- discard deleting only fakti-created branches and leaving the user's own branch intact
 - dirty-tree 409, branch-name validation, corrupt-config recovery
 - graceful shutdown killing the pty with no orphan processes
 - 36 navigation assertions: breadcrumbs, back links, Esc behaviour, browser back from every
