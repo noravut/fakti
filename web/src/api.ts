@@ -1,6 +1,7 @@
 import type {
-  BootstrapResponse, CreateSessionBody, Defect, DiffStat, DirtyConflict, GitStatus,
-  Session, Settings, ValidateResult, Workspace, WorkspaceColor,
+  BootstrapResponse, BranchInfo, CheckResult, CreateSessionBody, Defect, DefectListResponse,
+  DiffStat, DirtyConflict, FetchMode, GitStatus, Session, Settings, SourceConfig, ValidateResult,
+  Workspace, WorkspaceColor,
 } from '@shared/types'
 
 export class ApiError extends Error {
@@ -48,16 +49,36 @@ export const api = {
   workspaces: {
     list: () => req<Workspace[]>('/api/workspaces'),
     validate: (path: string) => post<ValidateResult>('/api/workspaces/validate', { path }),
-    create: (input: { path: string; name: string; baseBranch: string; color: WorkspaceColor }) =>
+    create: (input: Omit<Workspace, 'id'>) =>
       post<Workspace>('/api/workspaces', input),
     update: (id: string, patch: Partial<Workspace>) =>
       req<Workspace>(`/api/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
     remove: (id: string) => req<{ ok: true }>(`/api/workspaces/${id}`, { method: 'DELETE' }),
     status: (id: string) => req<GitStatus>(`/api/workspaces/${id}/status`),
+    branches: (id: string) => req<BranchInfo[]>(`/api/workspaces/${id}/branches`),
   },
 
   defects: {
-    list: () => req<Defect[]>('/api/defects'),
+    /** mode=cache คืน null เมื่อยังไม่เคย cache ไว้ — ฝั่งเรียกเอาไปตัดสินใจว่าจะขึ้น skeleton ไหม */
+    list: (workspaceId?: string | null, mode: FetchMode = 'auto') => {
+      const q = new URLSearchParams()
+      if (workspaceId) q.set('workspaceId', workspaceId)
+      if (mode !== 'auto') q.set('mode', mode)
+      return req<DefectListResponse | null>(`/api/defects${q.size ? `?${q}` : ''}`)
+    },
+    get: (id: string, workspaceId?: string | null) =>
+      req<Defect>(
+        `/api/defects/${encodeURIComponent(id)}${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`,
+      ),
+  },
+
+  sources: {
+    list: () => req<SourceConfig[]>('/api/sources'),
+    test: (id: string, vars: Record<string, string>, workspaceId?: string | null) =>
+      post<CheckResult[]>(
+        `/api/sources/${encodeURIComponent(id)}/test${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`,
+        { vars },
+      ),
   },
 
   sessions: {
@@ -66,6 +87,7 @@ export const api = {
     create: (body: CreateSessionBody) => post<Session>('/api/sessions', body),
     append: (id: string, defectIds: string[]) => post<Session>(`/api/sessions/${id}/append`, { defectIds }),
     diff: (id: string) => req<DiffStat>(`/api/sessions/${id}/diff`),
+    rename: (id: string, name: string) => post<Session>(`/api/sessions/${id}/rename`, { name }),
     close: (id: string) => post<Session>(`/api/sessions/${id}/close`),
     discard: (id: string) => post<Session>(`/api/sessions/${id}/discard`),
     reopen: (id: string) => post<Session>(`/api/sessions/${id}/reopen`),

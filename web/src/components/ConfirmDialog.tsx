@@ -1,13 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
-import type { Defect, DirtyStrategy, Session, Workspace } from '@shared/types'
-import { ApiError } from '../api'
-import { suggestBranch } from '../format'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import type { BranchChoice, BranchInfo, Defect, DirtyStrategy, Session, Workspace } from '@shared/types'
+import { ApiError, api } from '../api'
+import { relativeTime, suggestBranch } from '../format'
 import { Button, Input } from './ui'
 import { WorkspaceChip } from './WorkspaceChip'
 
+/** มี branch เยอะกว่านี้ถึงจะมีช่องค้นหา */
+const SEARCH_THRESHOLD = 10
+
+type Mode = BranchChoice['kind'] | 'append'
+
 export interface ConfirmPayload {
   mode: 'new' | 'append'
-  branch: string
+  branch: BranchChoice
   sessionId?: string
   dirtyStrategy?: DirtyStrategy
 }
@@ -26,22 +32,108 @@ interface Props {
 export function ConfirmDialog({
   defects, workspace, openSessions, dirtyCount, onCancel, onSubmit,
 }: Props) {
-  const [mode, setMode] = useState<'new' | 'append'>('new')
-  const [branch, setBranch] = useState(() => suggestBranch(defects))
+  const [mode, setMode] = useState<Mode>('new')
   const [sessionId, setSessionId] = useState(openSessions[0]?.id ?? '')
   const [dirty, setDirty] = useState(dirtyCount)
   const [dirtyStrategy, setDirtyStrategy] = useState<DirtyStrategy | undefined>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const branchRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => branchRef.current?.focus(), [])
+  const [name, setName] = useState(() => suggestBranch(defects))
+  const [from, setFrom] = useState(workspace.baseBranch)
+  const [existing, setExisting] = useState('')
+  const [search, setSearch] = useState('')
+  const [branches, setBranches] = useState<BranchInfo[]>([])
+  const [branchError, setBranchError] = useState<string | null>(null)
 
-  const branchValid = /^[a-zA-Z0-9._/-]+$/.test(branch) && !branch.startsWith('-')
+  const nameRef = useRef<HTMLInputElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => nameRef.current?.focus(), [])
+
+  useEffect(() => {
+    let cancelled = false
+    void api.workspaces.branches(workspace.id)
+      .then(list => {
+        if (cancelled) return
+        setBranches(list)
+        setExisting(list.find(b => !b.isProtected)?.name ?? '')
+      })
+      .catch(err => {
+        if (!cancelled) setBranchError(err instanceof Error ? err.message : 'อ่านรายชื่อ branch ไม่ได้')
+      })
+    return () => { cancelled = true }
+  }, [workspace.id])
+
+  // Esc ปิดได้เสมอ ไม่ว่า focus จะอยู่ตรงไหนใน dialog
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
+  // กด Tab แล้วต้องวนอยู่ใน dialog ไม่หลุดไปหน้าเบื้องหลัง
+  useEffect(() => {
+    const el = dialogRef.current
+    if (!el) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      const focusable = [...el.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )].filter(x => x.offsetParent !== null)
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (!first || !last) return
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    el.addEventListener('keydown', onKey)
+    return () => el.removeEventListener('keydown', onKey)
+  }, [])
+
+  const current = branches.find(b => b.isCurrent)
+  const onProtected = current?.isProtected ?? false
+  // ตัดออกเฉพาะ branch ที่ห้ามแก้ทับ — baseBranch อาจเป็น branch งานที่ทำต่อได้ตามปกติ
+  const others = useMemo(() => branches.filter(b => !b.isProtected), [branches])
+  const matches = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return q ? others.filter(b => b.name.toLowerCase().includes(q)) : others
+  }, [others, search])
+
+  const nameValid = /^[a-zA-Z0-9._/-]+$/.test(name) && !name.startsWith('-')
+  const duplicate = nameValid && branches.some(b => b.name === name)
+  const selected = others.find(b => b.name === existing)
+
+  const canUseExisting = others.length > 0
+  const canUseCurrent = Boolean(current) && !onProtected
+  const canAppend = openSessions.length > 0
+
+  const ready =
+    mode === 'append' ? sessionId !== ''
+      : mode === 'existing' ? existing !== ''
+        : mode === 'current' ? canUseCurrent
+          : nameValid && !duplicate
+
   // ต่อใน session เดิมไม่ต้องแตะ working tree เลย เรื่องไฟล์ค้างจึงไม่เกี่ยว
-  const needsDirtyChoice = mode === 'new' && dirty > 0 && !dirtyStrategy
-  const canSubmit = !busy && !needsDirtyChoice
-    && (mode === 'append' ? sessionId !== '' : branchValid)
+  const needsDirtyChoice = mode !== 'append' && dirty > 0 && !dirtyStrategy
+  const canSubmit = !busy && !needsDirtyChoice && ready
+
+  /** เหลือทางเลือกเดียวก็ไม่ต้องให้เลือก — แสดงเป็นข้อความพอ */
+  const optionCount = 1 + Number(canUseExisting) + Number(canUseCurrent) + Number(canAppend)
+  const single = optionCount === 1
+
+  function choice(): BranchChoice {
+    if (mode === 'existing') return { kind: 'existing', name: existing }
+    if (mode === 'current') return { kind: 'current' }
+    return { kind: 'new', name, from }
+  }
 
   async function submit() {
     if (!canSubmit) return
@@ -50,8 +142,8 @@ export function ConfirmDialog({
     try {
       await onSubmit(
         mode === 'append'
-          ? { mode, branch, sessionId }
-          : { mode, branch, dirtyStrategy },
+          ? { mode: 'append', branch: choice(), sessionId }
+          : { mode: 'new', branch: choice(), dirtyStrategy },
       )
     } catch (err) {
       const conflict = err instanceof ApiError ? err.dirty : null
@@ -68,28 +160,28 @@ export function ConfirmDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9"
-      onKeyDown={e => {
-        if (e.key === 'Escape') onCancel()
-        if (e.key === 'Enter' && !e.shiftKey) void submit()
-      }}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9">
       <button type="button" aria-label="ปิด" className="absolute inset-0 cursor-default" onClick={onCancel} />
 
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={`เริ่มแก้ ${defects.length} รายการ`}
-        className="relative flex w-[560px] max-w-full flex-col gap-4 rounded-card border border-line bg-paper p-6"
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey && (e.target as HTMLElement).tagName !== 'SELECT') {
+            void submit()
+          }
+        }}
+        className="relative flex max-h-full w-full max-w-[560px] flex-col gap-4 overflow-y-auto rounded-card border border-line bg-paper p-6"
       >
-        {mode === 'new' && dirty > 0 && (
-          <div className="flex flex-col gap-2.5 rounded border border-warn/40 bg-warn/10 px-3.5 py-3">
+        {mode !== 'append' && dirty > 0 && (
+          <div className="flex min-w-0 flex-col gap-2.5 rounded border border-warn/40 bg-warn/10 px-3.5 py-3">
             <span className="inline-flex items-center gap-[7px] text-sm text-warn-deep">
-              <span className="h-1.5 w-1.5 rounded-full bg-warn" />
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warn" />
               working tree มีไฟล์ค้าง {dirty} ไฟล์ — เลือกก่อนเริ่ม
             </span>
-            <div className="flex gap-2.5">
+            <div className="flex flex-wrap gap-2.5">
               <Button
                 size="sm"
                 variant={dirtyStrategy === 'stash' ? 'primary' : 'warn'}
@@ -102,12 +194,12 @@ export function ConfirmDialog({
                 variant={dirtyStrategy === 'keep' ? 'primary' : 'default'}
                 onClick={() => setDirtyStrategy('keep')}
               >
-                ทำต่อบน branch ปัจจุบัน
+                เอาไฟล์ค้างไปด้วย
               </Button>
             </div>
             {dirtyStrategy === 'keep' && (
               <span className="text-[13px] text-muted">
-                จะไม่แตก branch ใหม่ — งานทั้งหมดลงบน branch ที่เปิดอยู่ตอนนี้
+                ไฟล์ที่ยังไม่ commit จะติดไปกับ branch ที่เลือกด้านล่าง
               </span>
             )}
           </div>
@@ -115,86 +207,170 @@ export function ConfirmDialog({
 
         <span className="text-base font-semibold">เริ่มแก้ {defects.length} รายการ</span>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <WorkspaceChip workspace={workspace} />
-          <span className="font-mono text-xs text-faint">· {workspace.path}</span>
+          <span className="truncate font-mono text-xs text-faint">· {workspace.path}</span>
         </div>
 
-        <div className="overflow-hidden rounded-card border border-hair">
-          <label
-            className={`flex cursor-pointer gap-3 px-4 py-3.5 ${mode === 'new' ? 'bg-pine/[0.04]' : ''}`}
-          >
-            <input
-              type="radio"
-              name="session-mode"
-              checked={mode === 'new'}
-              onChange={() => setMode('new')}
-              className="mt-1 h-4 w-4 shrink-0 accent-pine"
-            />
-            <div className="flex flex-1 flex-col gap-2">
-              <span className="text-[15px] font-medium">session ใหม่</span>
-              <div className="flex items-center gap-2.5">
-                <span className="text-[13px] text-faint">branch</span>
-                <Input
-                  ref={branchRef}
-                  value={branch}
-                  spellCheck={false}
-                  onChange={e => setBranch(e.target.value)}
-                  onFocus={() => setMode('new')}
-                  className="flex-1"
-                />
-              </div>
-              {!branchValid && (
-                <span className="text-[13px] text-danger">ใช้ได้แค่ a-z 0-9 . _ / -</span>
-              )}
-              <span className="text-[13px] text-faint">
-                แตกจาก <span className="font-mono">{workspace.baseBranch}</span>
-              </span>
-            </div>
-          </label>
+        {branchError && <span className="text-[13px] text-danger">{branchError}</span>}
 
-          {openSessions.length > 0 && (
-            <label className="flex cursor-pointer gap-3 border-t border-hair px-4 py-3.5">
-              <input
-                type="radio"
-                name="session-mode"
-                checked={mode === 'append'}
-                onChange={() => setMode('append')}
-                className="mt-1 h-4 w-4 shrink-0 accent-pine"
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <Option
+            checked={mode === 'new'}
+            single={single}
+            onSelect={() => setMode('new')}
+            label="สร้าง branch ใหม่"
+          >
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="w-14 shrink-0 text-[13px] text-faint">ชื่อ</span>
+              <Input
+                ref={nameRef}
+                value={name}
+                spellCheck={false}
+                onChange={e => setName(e.target.value)}
+                onFocus={() => setMode('new')}
+                className="w-full min-w-0 flex-1"
               />
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[15px] text-muted">ต่อใน session ที่เปิดอยู่</span>
-                {openSessions.map(s => (
-                  <label key={s.id} className="flex cursor-pointer items-center gap-2">
-                    {openSessions.length > 1 && (
-                      <input
-                        type="radio"
-                        name="append-target"
-                        checked={sessionId === s.id}
-                        onChange={() => {
-                          setSessionId(s.id)
-                          setMode('append')
-                        }}
-                        className="h-3.5 w-3.5 accent-pine"
-                      />
-                    )}
-                    <WorkspaceChip workspace={workspace} />
-                    <span className="font-mono text-xs text-muted">· {s.branch}</span>
-                    <span className="text-[13px] text-faint">· {s.defectIds.length} defect</span>
-                  </label>
-                ))}
+            </div>
+            {!nameValid && name !== '' && (
+              <span className="text-[13px] text-danger">ใช้ได้แค่ a-z 0-9 . _ / -</span>
+            )}
+            {duplicate && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[13px] text-danger">มี branch นี้อยู่แล้ว</span>
+                {canUseExisting && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('existing')
+                      setExisting(name)
+                      setSearch('')
+                    }}
+                    className="text-[13px] text-pine underline hover:text-pine-deep"
+                  >
+                    ใช้ branch ที่มีอยู่แล้วแทน
+                  </button>
+                )}
               </div>
-            </label>
+            )}
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="w-14 shrink-0 text-[13px] text-faint">แตกจาก</span>
+              <select
+                value={from}
+                onChange={e => setFrom(e.target.value)}
+                className="w-full min-w-0 flex-1 rounded border border-line bg-paper px-2.5 py-1.5 font-mono text-[13px]"
+              >
+                {branches.length === 0 && <option value={workspace.baseBranch}>{workspace.baseBranch}</option>}
+                {branches.map(b => (
+                  <option key={b.name} value={b.name}>
+                    {b.name}{b.isBase ? ' (base)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </Option>
+
+          <Option
+            checked={mode === 'existing'}
+            single={single}
+            onSelect={() => setMode('existing')}
+            label="ใช้ branch ที่มีอยู่แล้ว"
+            disabled={!canUseExisting}
+            disabledHint={branches.length > 0 ? 'ยังไม่มี branch อื่นนอกจาก base' : undefined}
+          >
+            {others.length > SEARCH_THRESHOLD && (
+              <Input
+                value={search}
+                placeholder="ค้นหาชื่อ branch"
+                spellCheck={false}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full min-w-0"
+              />
+            )}
+            <select
+              value={existing}
+              onChange={e => setExisting(e.target.value)}
+              className="w-full min-w-0 rounded border border-line bg-paper px-2.5 py-1.5 font-mono text-[13px]"
+            >
+              {matches.length === 0 && <option value="">ไม่พบ branch ที่ตรงกับคำค้น</option>}
+              {matches.map(b => (
+                <option key={b.name} value={b.name}>
+                  {b.name} · {short(b.lastCommitSubject)} · {relativeTime(b.lastCommitDate)}
+                </option>
+              ))}
+            </select>
+            {selected && (
+              <span className="min-w-0 truncate text-[13px] text-faint">
+                commit ล่าสุด: {selected.lastCommitSubject || '—'} · {relativeTime(selected.lastCommitDate)}
+                {selected.isCurrent && ' · อยู่บน branch นี้อยู่แล้ว'}
+              </span>
+            )}
+            <span className="text-[13px] text-faint">จะ checkout ไป branch นี้ ไม่สร้างใหม่</span>
+          </Option>
+
+          <Option
+            checked={mode === 'current'}
+            single={single}
+            onSelect={() => setMode('current')}
+            label="ทำต่อบน branch ปัจจุบัน"
+            disabled={!canUseCurrent}
+            disabledHint={
+              onProtected && current
+                ? `ตอนนี้อยู่บน ${current.name} ซึ่งเป็น branch ที่ป้องกันไว้ เลือกสร้าง branch ใหม่แทน`
+                : undefined
+            }
+          >
+            <span className="min-w-0 truncate text-[13px]">
+              ทำต่อบน <span className="font-mono">{current?.name ?? '—'}</span>
+            </span>
+            {current && (
+              <span className="min-w-0 truncate text-[13px] text-faint">
+                commit ล่าสุด {current.lastCommitSubject || '—'} · {relativeTime(current.lastCommitDate)}
+              </span>
+            )}
+            {dirty > 0 && (
+              <span className="text-[13px] text-warn-deep">
+                มีไฟล์ที่แก้ค้างไว้ {dirty} ไฟล์ การเปลี่ยนแปลงรอบนี้จะรวมอยู่ด้วย
+              </span>
+            )}
+          </Option>
+
+          {canAppend && (
+            <Option
+              checked={mode === 'append'}
+              single={single}
+              onSelect={() => setMode('append')}
+              label="ต่อใน session ที่เปิดอยู่"
+            >
+              {openSessions.map(s => (
+                <label key={s.id} className="flex min-w-0 cursor-pointer items-center gap-2">
+                  {openSessions.length > 1 && (
+                    <input
+                      type="radio"
+                      name="append-target"
+                      checked={sessionId === s.id}
+                      onChange={() => {
+                        setSessionId(s.id)
+                        setMode('append')
+                      }}
+                      className="h-3.5 w-3.5 shrink-0 accent-pine"
+                    />
+                  )}
+                  <span className="truncate font-mono text-xs text-muted">{s.branch}</span>
+                  <span className="shrink-0 text-[13px] text-faint">· {s.defectIds.length} defect</span>
+                </label>
+              ))}
+            </Option>
           )}
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 flex-col gap-2">
           <span className="text-[13px] text-faint">รวมอยู่ใน</span>
-          {defects.map(d => (
-            <div key={d.id} className="flex items-center gap-2.5">
-              <span className="text-[13px] text-pine">✓</span>
-              <span className="font-mono text-[13px] font-medium">{d.key}</span>
-              <span className="truncate text-sm">{d.title}</span>
+          {defects.map((d, i) => (
+            <div key={d.id} className="flex min-w-0 items-center gap-2.5">
+              <span className="w-4 shrink-0 text-right font-mono text-[13px] text-faint">{i + 1}.</span>
+              <span className="shrink-0 font-mono text-[13px] font-medium">{d.key}</span>
+              <span className="truncate text-sm" title={d.title}>{d.title}</span>
             </div>
           ))}
         </div>
@@ -210,4 +386,80 @@ export function ConfirmDialog({
       </div>
     </div>
   )
+}
+
+interface OptionProps {
+  checked: boolean
+  /** เหลือทางเลือกเดียว — ไม่ต้องมี radio ให้กด */
+  single: boolean
+  onSelect: () => void
+  label: string
+  disabled?: boolean
+  disabledHint?: string
+  children: ReactNode
+}
+
+/**
+ * ตัวเลือกที่ยังไม่ถูกเลือกจะยุบเหลือแค่บรรทัดชื่อ
+ * ใช้ grid-template-rows 0fr→1fr เพราะ animate height ได้จริงโดยไม่ต้องรู้ความสูงล่วงหน้า
+ */
+function Option({ checked, single, onSelect, label, disabled, disabledHint, children }: OptionProps) {
+  if (disabled && !disabledHint) return null
+
+  return (
+    <div
+      className={
+        'flex min-w-0 gap-2.5 rounded border-l-[3px] py-2 pl-2.5 pr-3 transition-colors motion-reduce:transition-none ' +
+        (disabled
+          ? 'border-l-transparent opacity-50'
+          : checked
+            ? 'border-l-pine'
+            : 'border-l-transparent hover:border-l-line')
+      }
+    >
+      {!single && (
+        <input
+          type="radio"
+          name="branch-mode"
+          checked={checked}
+          disabled={disabled}
+          onChange={onSelect}
+          aria-label={label}
+          className="mt-1 h-3.5 w-3.5 shrink-0 accent-pine"
+        />
+      )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <button
+          type="button"
+          disabled={disabled || single}
+          onClick={onSelect}
+          className={
+            'self-start text-left text-sm disabled:cursor-default ' +
+            (checked ? 'font-medium' : 'text-muted')
+          }
+        >
+          {label}
+        </button>
+
+        {disabled ? (
+          <span className="pt-1 text-[13px] text-warn-deep">{disabledHint}</span>
+        ) : (
+          <div
+            aria-hidden={!checked}
+            className="grid transition-[grid-template-rows] duration-150 motion-reduce:transition-none"
+            style={{ gridTemplateRows: checked ? '1fr' : '0fr' }}
+          >
+            <div className="min-w-0 overflow-hidden">
+              <div className="flex min-w-0 flex-col gap-2 pt-2">{children}</div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function short(subject: string): string {
+  const trimmed = subject.trim()
+  return trimmed.length > 40 ? `${trimmed.slice(0, 40)}…` : trimmed || 'ไม่มี commit'
 }

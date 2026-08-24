@@ -2,7 +2,9 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { ValidateResult, Workspace, WorkspaceColor } from '@shared/types'
 import { WORKSPACE_COLORS } from '@shared/types'
-import { readSettings, readWorkspaces, writeSettings, writeWorkspaces } from '../core/config'
+import {
+  protectedBranchesFor, readSettings, readWorkspaces, writeSettings, writeWorkspaces,
+} from '../core/config'
 import * as git from '../core/git'
 
 const colorEnum = z.enum(WORKSPACE_COLORS as [WorkspaceColor, ...WorkspaceColor[]])
@@ -12,6 +14,9 @@ const createBody = z.object({
   name: z.string().min(1),
   baseBranch: z.string().min(1),
   color: colorEnum,
+  sourceId: z.string().optional(),
+  sourceVars: z.record(z.string()).optional(),
+  protectedBranches: z.array(z.string()).optional(),
 })
 
 const patchBody = createBody.partial()
@@ -57,7 +62,7 @@ workspaceRoutes.post('/', async c => {
   const parsed = createBody.safeParse(await c.req.json().catch(() => null))
   if (!parsed.success) return c.json({ error: 'ข้อมูลไม่ครบ' }, 400)
 
-  const { path: repoPath, name, baseBranch, color } = parsed.data
+  const { path: repoPath, name, baseBranch, color, sourceId, sourceVars, protectedBranches } = parsed.data
   if (!git.isUsablePath(repoPath)) return c.json({ error: 'ไม่พบโฟลเดอร์นี้' }, 400)
   if (!(await git.isGitRepo(repoPath))) return c.json({ error: 'โฟลเดอร์นี้ไม่ใช่ git repo' }, 400)
   if (!git.isValidBranchName(baseBranch)) return c.json({ error: 'ชื่อ base branch ไม่ถูกต้อง' }, 400)
@@ -71,6 +76,9 @@ workspaceRoutes.post('/', async c => {
     path: repoPath,
     baseBranch,
     color,
+    sourceId,
+    sourceVars,
+    protectedBranches,
   }
   writeWorkspaces([...list, workspace])
 
@@ -113,6 +121,18 @@ workspaceRoutes.delete('/:id', c => {
     writeSettings({ ...settings, activeWorkspaceId: rest[0]?.id ?? null })
   }
   return c.json({ ok: true })
+})
+
+workspaceRoutes.get('/:id/branches', async c => {
+  const workspace = readWorkspaces().find(w => w.id === c.req.param('id'))
+  if (!workspace) return c.json({ error: 'ไม่พบ workspace' }, 404)
+  if (!git.isUsablePath(workspace.path)) return c.json({ error: 'ไม่พบโฟลเดอร์ของ repo นี้' }, 410)
+
+  try {
+    return c.json(await git.branchDetails(workspace.path, workspace.baseBranch, protectedBranchesFor(workspace)))
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'อ่านรายชื่อ branch ไม่ได้' }, 500)
+  }
 })
 
 workspaceRoutes.get('/:id/status', async c => {

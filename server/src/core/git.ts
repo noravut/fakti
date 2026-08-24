@@ -2,7 +2,8 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { DiffStat, GitStatus } from '@shared/types'
+import type { BranchInfo, DiffStat, GitStatus } from '@shared/types'
+import { isProtectedBranch } from './config'
 
 const execFileAsync = promisify(execFile)
 
@@ -53,6 +54,42 @@ export async function listBranches(cwd: string): Promise<string[]> {
   return stdout.split('\n').map(s => s.trim()).filter(Boolean)
 }
 
+/**
+ * local branch ทั้งหมด ใหม่สุดขึ้นก่อน พร้อม commit ล่าสุดของแต่ละตัว
+ * ใช้ \t คั่นเพราะ subject มี space ได้แต่มี tab ไม่ได้
+ */
+export async function branchDetails(
+  cwd: string,
+  baseBranch: string,
+  protectedBranches: string[],
+): Promise<BranchInfo[]> {
+  const [{ stdout }, current] = await Promise.all([
+    git(cwd, [
+      'for-each-ref',
+      '--sort=-committerdate',
+      '--format=%(refname:short)%09%(subject)%09%(committerdate:iso)',
+      'refs/heads',
+    ]),
+    currentBranch(cwd),
+  ])
+
+  return stdout
+    .split('\n')
+    .filter(line => line.trim().length > 0)
+    .map(line => {
+      const [name = '', subject = '', date = ''] = line.split('\t')
+      return {
+        name,
+        lastCommitSubject: subject,
+        lastCommitDate: date,
+        isCurrent: name === current,
+        isBase: name === baseBranch,
+        isProtected: isProtectedBranch(name, protectedBranches),
+      }
+    })
+    .filter(b => b.name.length > 0)
+}
+
 export async function currentBranch(cwd: string): Promise<string> {
   const { stdout } = await git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'])
   return stdout.trim()
@@ -94,23 +131,41 @@ export async function fetch(cwd: string): Promise<void> {
 }
 
 /**
- * สร้าง branch ใหม่จาก origin/<base> ถ้าไม่มี remote ref ให้ตกมาใช้ <base> ในเครื่อง
- * คืน true ถ้าสร้างสำเร็จ (ใช้ตัดสินใจตอน discard ว่าลบ branch ได้ไหม)
+ * สร้าง branch ใหม่จาก base
+ * preferRemote = true จะลอง origin/<base> ก่อน เพื่อเริ่มจากของล่าสุดบน remote
+ * ใช้เฉพาะตอนแตกจาก baseBranch ของ workspace — ถ้าผู้ใช้เลือก branch เองต้องได้ ref ในเครื่อง
+ * ตามที่เห็นใน dropdown ไม่ใช่ของ origin ที่อาจคนละ commit
  */
-export async function createBranch(cwd: string, name: string, base: string): Promise<void> {
+export async function createBranch(
+  cwd: string,
+  name: string,
+  base: string,
+  preferRemote: boolean,
+): Promise<void> {
   if (!isValidBranchName(name)) throw new Error(`ชื่อ branch ไม่ถูกต้อง: ${name}`)
   if (!isValidBranchName(base)) throw new Error(`ชื่อ base branch ไม่ถูกต้อง: ${base}`)
-  try {
-    await git(cwd, ['checkout', '-b', name, `origin/${base}`])
-  } catch {
-    await git(cwd, ['checkout', '-b', name, base])
+  if (preferRemote) {
+    try {
+      await git(cwd, ['checkout', '-b', name, `origin/${base}`])
+      return
+    } catch {
+      /* ไม่มี remote ref ตกมาใช้ของในเครื่อง */
+    }
   }
+  await git(cwd, ['checkout', '-b', name, base])
 }
 
 /** สลับไป branch ที่มีอยู่แล้ว — ใช้ตอนเปิด session เดิมขึ้นมาใหม่ */
 export async function checkoutExisting(cwd: string, branch: string): Promise<void> {
   if (!isValidBranchName(branch)) throw new Error(`ชื่อ branch ไม่ถูกต้อง: ${branch}`)
   await git(cwd, ['checkout', branch])
+}
+
+/** เปลี่ยนชื่อ branch — ทำตอนที่ยังอยู่บน branch นั้นได้ HEAD จะตามไปเอง */
+export async function renameBranch(cwd: string, from: string, to: string): Promise<void> {
+  if (!isValidBranchName(from)) throw new Error(`ชื่อ branch ไม่ถูกต้อง: ${from}`)
+  if (!isValidBranchName(to)) throw new Error(`ชื่อ branch ไม่ถูกต้อง: ${to}`)
+  await git(cwd, ['branch', '-m', from, to])
 }
 
 export async function branchExists(cwd: string, name: string): Promise<boolean> {
@@ -178,15 +233,13 @@ async function logCommits(cwd: string, base: string): Promise<DiffStat['commits'
 }
 
 /**
- * ทิ้งงานทั้งหมดของ session: คืน working tree, กลับ base branch, ลบ branch
- * deleteBranch = false เมื่อ session ทำงานบน branch เดิมของผู้ใช้ (dirtyStrategy 'keep')
- * — ลบไปจะกินงานคนอื่น
+ * ทิ้งงานทั้งหมดของ session ที่ fakti สร้าง branch เอง
+ * คืน working tree, กลับ base branch, แล้วลบ branch ทิ้ง
  */
-export async function discard(
+export async function discardCreated(
   cwd: string,
   branch: string,
   baseBranch: string,
-  deleteBranch: boolean,
 ): Promise<void> {
   if (!isValidBranchName(branch)) throw new Error(`ชื่อ branch ไม่ถูกต้อง: ${branch}`)
   if (!isValidBranchName(baseBranch)) throw new Error(`ชื่อ base branch ไม่ถูกต้อง: ${baseBranch}`)
@@ -194,7 +247,19 @@ export async function discard(
   await git(cwd, ['checkout', '--', '.'])
   await git(cwd, ['clean', '-fd'])
   await git(cwd, ['checkout', baseBranch])
-  if (deleteBranch && branch !== baseBranch) {
+  if (branch !== baseBranch) {
     await git(cwd, ['branch', '-D', branch])
   }
+}
+
+/**
+ * branch เป็นของผู้ใช้อยู่ก่อนแล้ว — ย้อนแค่งานของรอบนี้ กลับไปที่ commit ตอนเริ่ม session
+ * ห้ามลบ branch และห้ามสลับ branch เพราะงานก่อนหน้าบน branch นี้ต้องอยู่ครบ
+ */
+export async function discardExisting(cwd: string, baseCommit: string): Promise<void> {
+  if (!/^[0-9a-f]{7,40}$/i.test(baseCommit)) {
+    throw new Error(`commit ไม่ถูกต้อง: ${baseCommit}`)
+  }
+  await git(cwd, ['reset', '--hard', baseCommit])
+  await git(cwd, ['clean', '-fd'])
 }
