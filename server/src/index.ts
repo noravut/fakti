@@ -9,8 +9,10 @@ import {
   DEFAULT_PORT, PAT_DIR, getWarnings, readSettings, readWorkspaces, writeSettings,
 } from './core/config'
 import { SessionManager, checkPty } from './core/session'
+import { ensureSecretsFile, readSources } from './core/source/config'
 import { workspaceRoutes } from './routes/workspaces'
-import { defectRoutes } from './routes/defects'
+import { defectRoutes, mockRoutes } from './routes/defects'
+import { sourceRoutes } from './routes/sources'
 import { sessionRoutes } from './routes/sessions'
 import { attachTerminalBridge } from './ws'
 
@@ -26,6 +28,7 @@ const app = new Hono()
 app.get('/api/bootstrap', c => {
   const workspaces = readWorkspaces()
   const settings = readSettings()
+  const { activeSourceId, sources } = readSources()
   const warnings = getWarnings()
   if (!pty.ok && pty.message) warnings.push(pty.message)
 
@@ -34,18 +37,29 @@ app.get('/api/bootstrap', c => {
     ? settings.activeWorkspaceId
     : workspaces[0]?.id ?? null
 
+  const activeSource = sources.some(s => s.id === settings.activeSourceId)
+    ? settings.activeSourceId
+    : activeSourceId ?? sources[0]?.id ?? null
+
   const body: BootstrapResponse = {
     workspaces,
     activeWorkspaceId: active,
     sessions: manager.list(),
     needsSetup: workspaces.length === 0,
     warnings,
+    sources,
+    activeSourceId: activeSource,
+    myName: settings.myName,
+    protectedBranches: settings.protectedBranches,
   }
   return c.json(body)
 })
 
 const settingsBody = z.object({
   activeWorkspaceId: z.string().nullable().optional(),
+  activeSourceId: z.string().nullable().optional(),
+  myName: z.string().nullable().optional(),
+  protectedBranches: z.array(z.string()).optional(),
   port: z.number().int().min(1).max(65535).optional(),
 })
 
@@ -61,6 +75,8 @@ app.patch('/api/settings', async c => {
 
 app.route('/api/workspaces', workspaceRoutes)
 app.route('/api/defects', defectRoutes)
+app.route('/api/sources', sourceRoutes)
+app.route('/api/mock', mockRoutes)
 app.route('/api/sessions', sessionRoutes(manager))
 
 app.all('/api/*', c => c.json({ error: 'ไม่มี endpoint นี้' }, 404))
@@ -95,6 +111,8 @@ app.get('*', c => {
 })
 
 // ── boot ────────────────────────────────────────────────────────
+
+ensureSecretsFile()
 
 const port = readSettings().port || DEFAULT_PORT
 const server = serve({ fetch: app.fetch, hostname: HOST, port }, info => {

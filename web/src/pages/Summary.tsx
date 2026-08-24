@@ -80,6 +80,8 @@ export function Summary({ id }: { id: string }) {
 
   const files = diff?.files ?? []
   const commits = diff?.commits ?? []
+  // branch เป็นของผู้ใช้อยู่ก่อนแล้ว — ทิ้งได้แค่งานรอบนี้ ลบ branch ไม่ได้
+  const onExistingBranch = session.branchOwnership === 'existing'
   const maxChange = Math.max(1, ...files.map(f => f.added + f.removed))
 
   return (
@@ -111,6 +113,11 @@ export function Summary({ id }: { id: string }) {
             <span className="font-mono text-[13px] text-danger">−{diff?.totalRemoved ?? 0}</span>
             <span className="font-mono text-[13px] text-faint">· {commits.length} commit</span>
           </div>
+          {onExistingBranch && (
+            <span className="text-[13px] text-faint">
+              แสดงเฉพาะการเปลี่ยนแปลงในรอบนี้ ไม่รวมงานที่มีอยู่บน branch นี้ก่อนหน้า
+            </span>
+          )}
         </div>
 
         <div className="flex flex-col gap-2 px-5 py-4">
@@ -159,7 +166,7 @@ export function Summary({ id }: { id: string }) {
           <Button onClick={() => navigate(`/session/${id}`)}>กลับเข้า session</Button>
           <span className="flex-1" />
           <Button variant="danger" disabled={busy} onClick={() => setConfirmDiscard(true)}>
-            ทิ้ง branch นี้
+            {onExistingBranch ? 'ยกเลิกการเปลี่ยนแปลงรอบนี้' : 'ทิ้ง branch นี้'}
           </Button>
           <Button variant="primary" onClick={() => navigate('/')}>เสร็จ</Button>
         </div>
@@ -182,10 +189,27 @@ export function Summary({ id }: { id: string }) {
             className="relative flex w-[480px] max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-[22px]"
           >
             <span className="text-base font-semibold">
-              ทิ้ง branch <span className="font-mono text-sm">{session.branch}</span>?
+              {onExistingBranch ? (
+                <>ยกเลิกการเปลี่ยนแปลงบน <span className="font-mono text-sm">{session.branch}</span>?</>
+              ) : (
+                <>ทิ้ง branch <span className="font-mono text-sm">{session.branch}</span>?</>
+              )}
             </span>
             <span className="text-sm leading-[1.7] text-muted">
-              {session.createdBranch ? (
+              {onExistingBranch ? (
+                <>
+                  จะย้อน <span className="font-mono text-[13px]">{session.branch}</span> กลับไปที่{' '}
+                  <span className="font-mono text-[13px]">{session.baseCommit.slice(0, 7)}</span>{' '}
+                  ซึ่งเป็นจุดที่ session นี้เริ่ม — commit {commits.length} ตัวของรอบนี้
+                  {commits.length > 0 && <> ({commits.map(c => c.hash.slice(0, 7)).join(', ')})</>}{' '}
+                  กับไฟล์ที่ยังไม่ commit จะหายไป เอาคืนไม่ได้
+                  <br />
+                  <span className="text-ink">
+                    branch <span className="font-mono text-[13px]">{session.branch}</span> ไม่ถูกลบ
+                    และงานที่มีอยู่ก่อนหน้ายังอยู่ครบ
+                  </span>
+                </>
+              ) : (
                 <>
                   จะลบ branch พร้อม commit {commits.length} ตัว
                   {commits.length > 0 && (
@@ -193,12 +217,6 @@ export function Summary({ id }: { id: string }) {
                   )}{' '}
                   — working tree กลับไปที่{' '}
                   <span className="font-mono text-[13px]">{workspace.baseBranch}</span> เอาคืนไม่ได้
-                </>
-              ) : (
-                <>
-                  session นี้ทำงานบน branch เดิมของคุณ จะล้างไฟล์ที่ยังไม่ commit แล้วกลับไปที่{' '}
-                  <span className="font-mono text-[13px]">{workspace.baseBranch}</span>{' '}
-                  — <span className="font-mono text-[13px]">{session.branch}</span> ไม่ถูกลบ
                 </>
               )}
             </span>
@@ -208,7 +226,7 @@ export function Summary({ id }: { id: string }) {
                 disabled={busy}
                 onClick={() => void act(() => api.sessions.discard(id), () => navigate('/'))}
               >
-                ทิ้ง branch
+                {onExistingBranch ? 'ยกเลิกการเปลี่ยนแปลง' : 'ทิ้ง branch'}
               </DangerButton>
             </div>
           </div>

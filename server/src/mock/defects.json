@@ -7,8 +7,7 @@
     "severity": "high",
     "status": "open",
     "reporter": "ploy",
-    "createdAt": "2026-08-14T09:12:00+07:00",
-    "url": "https://tracker.example.com/browse/TC-1042"
+    "createdAt": "2026-08-14T09:12:00+07:00"
   },
   {
     "id": "d-tc-1051",
@@ -18,8 +17,7 @@
     "severity": "medium",
     "status": "open",
     "reporter": "nat",
-    "createdAt": "2026-08-16T14:40:00+07:00",
-    "url": "https://tracker.example.com/browse/TC-1051"
+    "createdAt": "2026-08-16T14:40:00+07:00"
   },
   {
     "id": "d-tc-1038",
@@ -29,8 +27,7 @@
     "severity": "critical",
     "status": "open",
     "reporter": "beam",
-    "createdAt": "2026-08-11T11:05:00+07:00",
-    "url": "https://tracker.example.com/browse/TC-1038"
+    "createdAt": "2026-08-11T11:05:00+07:00"
   },
   {
     "id": "d-tc-1060",
@@ -40,8 +37,7 @@
     "severity": "medium",
     "status": "open",
     "reporter": "ploy",
-    "createdAt": "2026-08-17T16:22:00+07:00",
-    "url": "https://tracker.example.com/browse/TC-1060"
+    "createdAt": "2026-08-17T16:22:00+07:00"
   },
   {
     "id": "d-gw-204",
@@ -51,8 +47,7 @@
     "severity": "low",
     "status": "open",
     "reporter": "nat",
-    "createdAt": "2026-08-12T10:30:00+07:00",
-    "url": "https://tracker.example.com/browse/GW-204"
+    "createdAt": "2026-08-12T10:30:00+07:00"
   },
   {
     "id": "d-gw-211",
@@ -62,7 +57,6 @@
     "severity": "low",
     "status": "open",
     "reporter": "beam",
-    "createdAt": "2026-08-15T13:48:00+07:00",
-    "url": "https://tracker.example.com/browse/GW-211"
+    "createdAt": "2026-08-15T13:48:00+07:00"
   }
 ]
