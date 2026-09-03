@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import type { Defect, Workspace } from '@shared/types'
+import { api } from '../api'
 import { SEVERITY_STYLE, relativeTime } from '../format'
 import { WorkspaceSelect } from './WorkspaceChip'
 
@@ -8,6 +10,8 @@ interface Props {
   workspaceId: string | null
   onWorkspaceChange: (id: string) => void
   selected: boolean
+  /** เลือกครบโควตาของ session แล้ว — ติ๊กเพิ่มไม่ได้ */
+  selectable?: boolean
   onToggleSelect: () => void
   expanded: boolean
   onToggleExpand: () => void
@@ -17,14 +21,16 @@ interface Props {
 
 export function DefectRow({
   defect, workspaces, workspaceId, onWorkspaceChange,
-  selected, onToggleSelect, expanded, onToggleExpand, fixedIn,
+  selected, selectable: withinQuota = true, onToggleSelect, expanded, onToggleExpand, fixedIn,
 }: Props) {
   const severity = SEVERITY_STYLE[defect.severity]
   // ไม่รู้ว่าจะให้แก้ที่ repo ไหน ก็เลือกไปแก้ไม่ได้
-  const selectable = workspaceId !== null
+  const selectable = workspaceId !== null && withinQuota
+  const detail = useDescription(defect, workspaceId, expanded)
 
   return (
-    <div className="flex flex-col gap-1.5 border-t border-hair px-4 py-3 first:border-t-0">
+    // เส้นคั่นอยู่ที่ตัวห่อฝั่ง list เพราะแต่ละแถวถูกวางแบบ absolute ตอน virtual scroll
+    <div className="flex flex-col gap-1.5 px-4 py-3">
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -43,25 +49,21 @@ export function DefectRow({
           {selected ? '✓' : ''}
         </button>
 
-        <span className="font-mono text-[13px] font-medium">{defect.key}</span>
+        <span className="shrink-0 font-mono text-[13px] font-medium">{defect.key}</span>
 
+        {/* title กินที่ที่เหลือทั้งหมด — หลาย defect ขึ้นต้นเหมือนกัน ตัดสั้นแล้วแยกไม่ออก */}
         <button
           type="button"
           onClick={onToggleExpand}
           aria-expanded={expanded}
-          className="flex-1 text-left text-[15px]"
+          title={defect.title}
+          className="min-w-0 flex-1 truncate text-left text-[15px]"
         >
           {defect.title}
         </button>
 
-        {fixedIn && (
-          <span className="shrink-0 rounded-chip border border-hair px-2 py-0.5 text-[11px] text-faint">
-            เคยแก้ใน <span className="font-mono">{fixedIn}</span>
-          </span>
-        )}
-
         <span
-          className="rounded-chip px-2 py-0.5 font-mono text-[11px]"
+          className="shrink-0 rounded-chip px-2 py-0.5 font-mono text-[11px]"
           style={{ color: severity.color, background: severity.background }}
         >
           {defect.severity}
@@ -70,14 +72,22 @@ export function DefectRow({
         <WorkspaceSelect workspaces={workspaces} value={workspaceId} onChange={onWorkspaceChange} />
       </div>
 
-      <div className="pl-7 text-[13px] text-faint">
-        {defect.reporter ? `เปิดโดย ${defect.reporter} · ` : ''}
-        {relativeTime(defect.createdAt)}
+      {/* ย้ายป้าย "เคยแก้ใน" ลงบรรทัดล่าง เพื่อคืนที่ให้ title */}
+      <div className="flex min-w-0 items-center gap-2 pl-7 text-[13px] text-faint">
+        <span className="truncate">
+          {defect.reporter ? `เปิดโดย ${defect.reporter} · ` : ''}
+          {relativeTime(defect.createdAt)}
+        </span>
+        {fixedIn && (
+          <span className="shrink-0 rounded-chip border border-hair px-2 py-0.5 text-[11px] text-faint">
+            เคยแก้ใน <span className="font-mono">{fixedIn}</span>
+          </span>
+        )}
       </div>
 
       {expanded && (
         <div className="mb-0.5 ml-7 mt-1.5 flex flex-col gap-2 rounded border border-hair bg-surface px-3.5 py-3">
-          <span className="text-sm leading-[1.7] text-muted">{defect.description}</span>
+          <span className="whitespace-pre-line text-sm leading-[1.7] text-muted">{detail}</span>
           {defect.url && (
             <a
               href={defect.url}
@@ -92,6 +102,34 @@ export function DefectRow({
       )}
     </div>
   )
+}
+
+/**
+ * tracker หลายเจ้าไม่ส่ง description มากับ list — ตามไปดึงตอนกางดูเท่านั้น
+ * ไม่ยิงทั้งหน้าเพราะรายการเดียวก็หลายสิบ request
+ */
+function useDescription(defect: Defect, workspaceId: string | null, expanded: boolean): string {
+  const [loaded, setLoaded] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!expanded || defect.description || loaded !== null || failed) return
+    let cancelled = false
+    void api.defects.get(defect.id, workspaceId)
+      .then(full => {
+        if (!cancelled) setLoaded(full.description)
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true)
+      })
+    return () => { cancelled = true }
+  }, [expanded, defect.id, defect.description, workspaceId, loaded, failed])
+
+  if (defect.description) return defect.description
+  if (loaded) return loaded
+  if (failed) return 'ดึงรายละเอียดไม่สำเร็จ — ลองกดโหลดใหม่'
+  if (loaded === '') return 'ไม่มีรายละเอียดเพิ่มเติม'
+  return expanded ? 'กำลังโหลดรายละเอียด…' : ''
 }
 
 export function DefectRowSkeleton() {

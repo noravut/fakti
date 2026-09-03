@@ -8,7 +8,7 @@ import { Terminal } from '../components/Terminal'
 import { Header } from '../components/Header'
 import { BackLink } from '../components/BackLink'
 import { ColorDot } from '../components/WorkspaceChip'
-import { Button, Card, DangerButton, ErrorBox } from '../components/ui'
+import { Button, Card, DangerButton, ErrorBox, Input } from '../components/ui'
 
 const STATE_STYLE: Record<SessionState, { label: string; color: string; dot: string; pulse: boolean; bold: boolean }> = {
   working: { label: 'กำลังทำงาน', color: '#A66A0F', dot: '#A66A0F', pulse: true, bold: false },
@@ -29,6 +29,14 @@ export function Session({ id }: { id: string }) {
   const [busy, setBusy] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [renameTo, setRenameTo] = useState('')
+  const [takenBranches, setTakenBranches] = useState<string[]>([])
+  // QA Gate — ร่างที่ server เติมให้ ผู้ใช้อ่าน/แก้ในนี้ก่อนส่ง
+  const [qaOpen, setQaOpen] = useState(false)
+  const [qaText, setQaText] = useState('')
+  const [qaLoading, setQaLoading] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const workspace = workspaces.find(w => w.id === session?.workspaceId)
@@ -64,6 +72,18 @@ export function Session({ id }: { id: string }) {
     return () => document.removeEventListener('mousedown', onClick)
   }, [menuOpen])
 
+  // รายชื่อ branch ไว้กันตั้งชื่อซ้ำ — ดึงตอนเปิด dialog เท่านั้น
+  useEffect(() => {
+    if (!renaming || !session) return
+    let cancelled = false
+    void api.workspaces.branches(session.workspaceId)
+      .then(list => {
+        if (!cancelled) setTakenBranches(list.map(b => b.name))
+      })
+      .catch(() => { /* ตรวจซ้ำไม่ได้ก็ปล่อยให้ server ตอบ 409 แทน */ })
+    return () => { cancelled = true }
+  }, [renaming, session?.workspaceId])
+
   // สถานะ "รอคุณตอบ" ต้องเห็นได้จาก tab อื่น
   useEffect(() => {
     document.title = state === 'waiting' ? '● รอคุณตอบ — Defect fixer' : 'Defect fixer'
@@ -85,6 +105,30 @@ export function Session({ id }: { id: string }) {
       return { label: '○ รออยู่', color: '#8E939C' }
     }
   }, [diff, session, state])
+
+  async function doRename() {
+    await act(
+      async () => {
+        const updated = await api.sessions.rename(id, renameTo)
+        setSession(s => (s ? { ...s, branch: updated.branch } : s))
+      },
+      () => setRenaming(false),
+    )
+  }
+
+  async function openQa() {
+    setQaOpen(true)
+    setQaLoading(true)
+    setError(null)
+    try {
+      setQaText((await api.sessions.qaPrompt(id)).prompt)
+    } catch (err) {
+      setQaOpen(false)
+      setError(err instanceof Error ? err.message : 'เตรียม prompt QA ไม่ได้')
+    } finally {
+      setQaLoading(false)
+    }
+  }
 
   async function act(fn: () => Promise<unknown>, then?: () => void) {
     setBusy(true)
@@ -119,6 +163,10 @@ export function Session({ id }: { id: string }) {
   }
 
   const style = STATE_STYLE[state]
+  // branch ของผู้ใช้เอง fakti ไม่มีสิทธิ์เปลี่ยนชื่อหรือลบ
+  const ownsBranch = session.branchOwnership === 'created'
+  const renameValid = /^[a-zA-Z0-9._/-]+$/.test(renameTo) && !renameTo.startsWith('-')
+  const renameTaken = renameValid && renameTo !== session.branch && takenBranches.includes(renameTo)
 
   return (
     <>
@@ -167,7 +215,32 @@ export function Session({ id }: { id: string }) {
                 ⋯
               </button>
               {menuOpen && (
-                <div className="absolute right-0 top-9 z-20 w-[220px] overflow-hidden rounded-card border border-line bg-paper shadow-sm">
+                <div className="absolute right-0 top-9 z-20 w-[240px] overflow-hidden rounded-card border border-line bg-paper shadow-sm">
+                  {ownsBranch && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false)
+                          setRenameTo(session.branch)
+                          setRenaming(true)
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-[13px] hover:bg-hairline"
+                      >
+                        เปลี่ยนชื่อ branch
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false)
+                          setConfirmDelete(true)
+                        }}
+                        className="w-full border-t border-hair px-4 py-2.5 text-left text-[13px] text-danger hover:bg-danger/5"
+                      >
+                        ลบ branch นี้
+                      </button>
+                    </>
+                  )}
                   <button
                     type="button"
                     disabled={!session.live}
@@ -175,14 +248,16 @@ export function Session({ id }: { id: string }) {
                       setMenuOpen(false)
                       setConfirmClose(true)
                     }}
-                    className="w-full px-4 py-2.5 text-left text-[13px] text-danger hover:bg-danger/5 disabled:cursor-not-allowed disabled:text-faint"
+                    className="w-full border-t border-hair px-4 py-2.5 text-left text-[13px] text-danger hover:bg-danger/5 disabled:cursor-not-allowed disabled:text-faint"
                   >
                     ปิด session นี้
                   </button>
                   <div className="border-t border-hair px-4 py-2 text-[11px] text-faint">
-                    {session.live
-                      ? 'หยุด claude จริงๆ — branch กับงานที่ทำไว้ยังอยู่'
-                      : 'session นี้ปิดไปแล้ว'}
+                    {!ownsBranch
+                      ? `${session.branch} เป็น branch ของคุณเอง fakti ไม่แตะชื่อหรือลบให้`
+                      : session.live
+                        ? 'ปิด session = หยุด claude จริงๆ แต่ branch กับงานที่ทำไว้ยังอยู่'
+                        : 'session นี้ปิดไปแล้ว'}
                   </div>
                 </div>
               )}
@@ -233,12 +308,145 @@ export function Session({ id }: { id: string }) {
           <span className="font-mono text-[13px] text-pine">+{diff?.totalAdded ?? 0}</span>
           <span className="font-mono text-[13px] text-danger">−{diff?.totalRemoved ?? 0}</span>
           <span className="flex-1" />
+          <Button
+            disabled={busy || !session.live}
+            title={session.live ? 'ส่ง prompt QA Gate ให้ claude ทวนงานที่แก้' : 'session ปิดไปแล้ว'}
+            onClick={() => void openQa()}
+          >
+            ตรวจ QA
+          </Button>
           <Button disabled={busy} onClick={() => void act(() => api.sessions.openEditor(id))}>
             เปิดใน VSCode
           </Button>
           <Button onClick={() => navigate(`/session/${id}/summary`)}>ดูสรุป</Button>
         </div>
       </Card>
+
+      {qaOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9">
+          <button
+            type="button"
+            aria-label="ปิดหน้าต่าง"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setQaOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative flex max-h-full w-[760px] max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-[22px]"
+          >
+            <span className="text-base font-semibold">ตรวจ QA ก่อนส่งมอบ</span>
+            <span className="text-[13px] text-muted">
+              fakti เติมชื่อ defect กับไฟล์ที่เปลี่ยนจาก git ให้แล้ว ส่วนที่เหลือ claude จะสรุปเองจาก
+              บทสนทนาที่ทำมา — อ่านและแก้ได้ทุกบรรทัดก่อนส่ง
+            </span>
+            {state === 'working' && (
+              <span className="text-[13px] text-warn-deep">
+                claude ยังทำงานอยู่ — ส่งตอนนี้ข้อความจะเข้าคิวรอจนงานปัจจุบันจบ
+              </span>
+            )}
+            <textarea
+              value={qaText}
+              disabled={qaLoading}
+              spellCheck={false}
+              onChange={e => setQaText(e.target.value)}
+              className="min-h-[50vh] w-full resize-y rounded border border-line bg-paper px-3 py-2 font-mono text-[13px] leading-[1.6] text-ink disabled:text-faint"
+              placeholder={qaLoading ? 'กำลังเตรียม prompt…' : ''}
+            />
+            <div className="mt-1 flex justify-end gap-2.5">
+              <Button onClick={() => setQaOpen(false)} disabled={busy}>ยกเลิก</Button>
+              <Button
+                variant="primary"
+                disabled={busy || qaLoading || qaText.trim() === ''}
+                onClick={() => void act(() => api.sessions.sendQa(id, qaText), () => setQaOpen(false))}
+              >
+                ส่งให้ตรวจ
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {renaming && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9">
+          <button
+            type="button"
+            aria-label="ปิดหน้าต่าง"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setRenaming(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative flex w-[480px] max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-[22px]"
+          >
+            <span className="text-base font-semibold">เปลี่ยนชื่อ branch</span>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[13px] text-faint">
+                ชื่อเดิม <span className="font-mono">{session.branch}</span>
+              </span>
+              <Input
+                autoFocus
+                value={renameTo}
+                spellCheck={false}
+                onChange={e => setRenameTo(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && renameValid && !renameTaken) void doRename()
+                }}
+              />
+              {!renameValid && renameTo !== '' && (
+                <span className="text-[13px] text-danger">ใช้ได้แค่ a-z 0-9 . _ / -</span>
+              )}
+              {renameTaken && <span className="text-[13px] text-danger">มี branch ชื่อนี้อยู่แล้ว</span>}
+            </div>
+            <div className="mt-1 flex justify-end gap-2.5">
+              <Button onClick={() => setRenaming(false)} disabled={busy}>ยกเลิก</Button>
+              <Button
+                variant="primary"
+                disabled={busy || !renameValid || renameTaken || renameTo === session.branch}
+                onClick={() => void doRename()}
+              >
+                เปลี่ยนชื่อ
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9">
+          <button
+            type="button"
+            aria-label="ปิดหน้าต่าง"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setConfirmDelete(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative flex w-[480px] max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-[22px]"
+          >
+            <span className="text-base font-semibold">
+              ลบ branch <span className="font-mono text-sm">{session.branch}</span>?
+            </span>
+            <span className="text-sm leading-[1.7] text-muted">
+              claude จะถูกหยุด แล้วลบ branch นี้ทิ้งพร้อม commit
+              {(diff?.commits.length ?? 0) > 0 && <> {diff?.commits.length} ตัว</>}{' '}
+              และไฟล์ที่ยังไม่ commit — working tree กลับไปที่{' '}
+              <span className="font-mono text-[13px]">{workspace.baseBranch}</span> เอาคืนไม่ได้
+            </span>
+            <div className="mt-1 flex justify-end gap-2.5">
+              <Button onClick={() => setConfirmDelete(false)} disabled={busy}>ยกเลิก</Button>
+              <DangerButton
+                disabled={busy}
+                onClick={() => void act(() => api.sessions.discard(id), () => navigate('/'))}
+              >
+                ลบ branch
+              </DangerButton>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmClose && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9">

@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ValidateResult, Workspace, WorkspaceColor } from '@shared/types'
 import { WORKSPACE_COLORS, WORKSPACE_COLOR_HEX } from '@shared/types'
 import { api } from '../api'
+import { parseBranchList } from '../format'
+import { useStore } from '../store'
+import { SourceForm } from './SourceForm'
 import { Button, Input } from './ui'
 
 const VALIDATE_DEBOUNCE_MS = 400
@@ -20,6 +23,10 @@ export function WorkspaceForm({ initial, takenColors, onSaved, onCancel }: Props
   const [color, setColor] = useState<WorkspaceColor>(
     initial?.color ?? WORKSPACE_COLORS.find(c => !takenColors.includes(c)) ?? 'blue',
   )
+  const { sources, activeSourceId, protectedBranches } = useStore()
+  const [sourceId, setSourceId] = useState(initial?.sourceId)
+  const [sourceVars, setSourceVars] = useState<Record<string, string>>(initial?.sourceVars ?? {})
+  const [protectedDraft, setProtectedDraft] = useState((initial?.protectedBranches ?? []).join(', '))
 
   const [check, setCheck] = useState<ValidateResult | null>(null)
   const [checking, setChecking] = useState(false)
@@ -67,7 +74,19 @@ export function WorkspaceForm({ initial, takenColors, onSaved, onCancel }: Props
     if (!canSave) return
     setSaving(true)
     setError(null)
-    const payload = { path: path.trim(), name: name.trim(), baseBranch: baseBranch.trim(), color }
+    const payload = {
+      path: path.trim(),
+      name: name.trim(),
+      baseBranch: baseBranch.trim(),
+      color,
+      sourceId,
+      // เก็บเฉพาะช่องที่กรอกจริง จะได้ไม่มี key ว่างค้างใน workspaces.json
+      sourceVars: Object.fromEntries(Object.entries(sourceVars).filter(([, v]) => v.trim())),
+      // ว่าง = ไม่ตั้งทับ ให้ตกไปใช้ค่าตั้งต้นของแอป
+      protectedBranches: parseBranchList(protectedDraft).length > 0
+        ? parseBranchList(protectedDraft)
+        : undefined,
+    }
     try {
       if (initial) await api.workspaces.update(initial.id, payload)
       else await api.workspaces.create(payload)
@@ -149,6 +168,33 @@ export function WorkspaceForm({ initial, takenColors, onSaved, onCancel }: Props
             />
           ))}
         </div>
+      </div>
+
+      <label className="flex flex-col gap-1.5">
+        <span className="text-[13px] text-muted">branch ที่ห้ามแก้ทับเฉพาะ repo นี้</span>
+        <Input
+          value={protectedDraft}
+          spellCheck={false}
+          placeholder={`ไม่ระบุ = ใช้ค่าตั้งต้น (${protectedBranches.join(', ') || 'ไม่มี'})`}
+          onChange={e => setProtectedDraft(e.target.value)}
+        />
+        <span className="text-[13px] text-faint">
+          คั่นด้วยจุลภาค — คนละเรื่องกับ base branch ด้านบน
+        </span>
+      </label>
+
+      <div className="border-t border-hair pt-4">
+        <SourceForm
+          sources={sources}
+          sourceId={sourceId}
+          vars={sourceVars}
+          defaultLabel={`ใช้ค่าตั้งต้นของแอป (${sources.find(s => s.id === activeSourceId)?.label ?? 'ยังไม่ได้ตั้ง'})`}
+          workspaceId={initial?.id}
+          onChange={next => {
+            setSourceId(next.sourceId)
+            setSourceVars(next.vars)
+          }}
+        />
       </div>
 
       {error && <span className="text-[13px] text-danger">{error}</span>}

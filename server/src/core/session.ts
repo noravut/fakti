@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import type { IPty } from 'node-pty'
 import type {
-  Defect, DiffStat, DirtyStrategy, ServerMessage, Session, SessionState, Workspace,
+  BranchChoice, BranchOwnership, Defect, DiffStat, DirtyStrategy, ServerMessage, Session,
+  SessionState, Workspace,
 } from '@shared/types'
-import { readSessions, writeSessions } from './config'
+import { isProtectedBranch, protectedBranchesFor, readSessions, writeSessions } from './config'
 import * as git from './git'
-import { buildPrompt, writeTaskFile } from './prompt'
+import { QA_FILE, buildPrompt, buildQaPrompt, writeTaskFile } from './prompt'
 
 /** output ที่เก็บไว้ให้ client ที่ต่อใหม่ ~200KB ต่อ session */
 const REPLAY_BUFFER_BYTES = 200 * 1024
@@ -134,7 +135,7 @@ export class SessionManager {
   async create(input: {
     workspace: Workspace
     defects: Defect[]
-    branch: string
+    branch: BranchChoice
     dirtyStrategy?: DirtyStrategy
   }): Promise<Session> {
     const { workspace, defects, branch, dirtyStrategy } = input
@@ -146,30 +147,19 @@ export class SessionManager {
       throw new HttpError(400, `${workspace.path} ไม่ใช่ git repo`)
     }
 
+    // ไฟล์ค้างต้องเคลียร์ก่อนเสมอ ไม่ว่าจะเลือก branch แบบไหน
     const st = await git.status(workspace.path)
-    let createdBranch = true
-    let workingBranch = branch
-
     if (st.isDirty) {
       if (dirtyStrategy === 'stash') {
-        await git.stash(workspace.path, `pat:${branch}`)
-      } else if (dirtyStrategy === 'keep') {
-        // ทำต่อบน branch ปัจจุบัน ไม่แตก branch ใหม่
-        workingBranch = st.branch
-        createdBranch = false
-      } else {
+        await git.stash(workspace.path, `pat:${branchLabel(branch, st.branch)}`)
+      } else if (dirtyStrategy !== 'keep') {
         throw new DirtyError(st.dirtyCount, st.branch)
       }
     }
 
-    if (createdBranch) {
-      if (await git.branchExists(workspace.path, branch)) {
-        throw new HttpError(409, `มี branch ${branch} อยู่แล้ว — ตั้งชื่ออื่นหรือทำต่อบน branch นั้น`)
-      }
-      await git.fetch(workspace.path)
-      await git.createBranch(workspace.path, branch, workspace.baseBranch)
-    }
+    const { workingBranch, ownership } = await this.prepareBranch(workspace, branch, st.branch)
 
+    // HEAD หลังจัดการ branch เสร็จ = จุดตั้งต้นของ session นี้ ไม่ว่าจะมาทางไหน
     const baseCommit = await git.headCommit(workspace.path)
     const now = new Date().toISOString()
 
@@ -183,7 +173,7 @@ export class SessionManager {
       state: 'working',
       createdAt: now,
       lastActivityAt: now,
-      createdBranch,
+      branchOwnership: ownership,
     }
 
     this.spawn(session, buildPrompt(defects))
@@ -191,6 +181,51 @@ export class SessionManager {
     this.records.push(session)
     this.persist()
     return session
+  }
+
+  /** จัดการ branch ตามที่ผู้ใช้เลือก แล้วบอกว่าลงเอยอยู่ branch ไหนและเป็นของใคร */
+  private async prepareBranch(
+    workspace: Workspace,
+    choice: BranchChoice,
+    currentBranch: string,
+  ): Promise<{ workingBranch: string; ownership: BranchOwnership }> {
+    const { path } = workspace
+
+    if (choice.kind === 'new') {
+      if (!git.isValidBranchName(choice.name)) {
+        throw new HttpError(400, `ชื่อ branch ไม่ถูกต้อง: ${choice.name}`)
+      }
+      if (await git.branchExists(path, choice.name)) {
+        throw new HttpError(409, `มี branch ${choice.name} อยู่แล้ว — ตั้งชื่ออื่นหรือเลือกทำต่อบน branch นั้น`)
+      }
+      if (!(await git.branchExists(path, choice.from))) {
+        throw new HttpError(400, `ไม่พบ branch ${choice.from} ที่จะแตกออกมา`)
+      }
+      await git.fetch(path)
+      await git.createBranch(path, choice.name, choice.from, choice.from === workspace.baseBranch)
+      return { workingBranch: choice.name, ownership: 'created' }
+    }
+
+    if (choice.kind === 'existing') {
+      if (!(await git.branchExists(path, choice.name))) {
+        throw new HttpError(404, `ไม่พบ branch ${choice.name} — อาจถูกลบไปแล้ว กดโหลดใหม่`)
+      }
+      if (choice.name !== currentBranch) {
+        await git.checkoutExisting(path, choice.name)
+      }
+      return { workingBranch: choice.name, ownership: 'existing' }
+    }
+
+    // กันเฉพาะ branch ที่อยู่ในรายการห้ามแก้ทับ ไม่ใช่ baseBranch
+    // baseBranch อาจเป็น branch งานของ dev เอง ซึ่งทำงานต่อบนนั้นได้ตามปกติ
+    if (isProtectedBranch(currentBranch, protectedBranchesFor(workspace))) {
+      throw new HttpError(
+        400,
+        `ตอนนี้อยู่บน ${currentBranch} ซึ่งเป็น branch ที่ป้องกันไว้ เลือกสร้าง branch ใหม่แทน`,
+      )
+    }
+    // ไม่ checkout ไม่สร้างอะไร — HEAD ปัจจุบันคือจุดตั้งต้นของ session นี้
+    return { workingBranch: currentBranch, ownership: 'existing' }
   }
 
   /** เปิด pty ใหม่บน branch เดิมของ session ที่ปิดไปแล้ว */
@@ -237,6 +272,29 @@ export class SessionManager {
 
     const line = writeTaskFile(live.cwd, buildPrompt(fresh))
     live.pty.write(`${line}\r`)
+    this.persist()
+    return session
+  }
+
+  /** prompt QA Gate ที่เติมข้อมูลของ session นี้ให้แล้ว — ให้ผู้ใช้อ่าน/แก้ก่อนส่ง */
+  async qaPrompt(id: string): Promise<string> {
+    const session = this.record(id)
+    if (!session) throw new HttpError(404, 'ไม่พบ session')
+    const files = await this.diff(id).then(d => d.files.map(f => f.path)).catch(() => [])
+    return buildQaPrompt(session.defects, files)
+  }
+
+  /** ส่ง prompt QA (ที่ผู้ใช้ตรวจแล้ว) เข้า pty เดิม — ผู้ใช้เป็นคนเลือกจังหวะเอง */
+  sendQa(id: string, prompt: string): Session {
+    const session = this.record(id)
+    if (!session) throw new HttpError(404, 'ไม่พบ session')
+    const live = this.live.get(id)
+    if (!live || live.exited) throw new HttpError(409, 'session นี้ปิดไปแล้ว')
+
+    session.lastActivityAt = new Date().toISOString()
+    const line = writeTaskFile(live.cwd, prompt, QA_FILE)
+    live.pty.write(`${line}\r`)
+    live.lastOutputAt = Date.now()
     this.persist()
     return session
   }
@@ -415,6 +473,37 @@ export class SessionManager {
     this.persist()
   }
 
+  /**
+   * เปลี่ยนชื่อ branch ของ session
+   * ทำได้เฉพาะ branch ที่ fakti สร้างเอง — ของผู้ใช้อาจมีคนอื่นอ้างถึงอยู่
+   */
+  async rename(id: string, name: string): Promise<Session> {
+    const session = this.record(id)
+    if (!session) throw new HttpError(404, 'ไม่พบ session')
+    if (session.branchOwnership !== 'created') {
+      throw new HttpError(400, 'เปลี่ยนชื่อได้เฉพาะ branch ที่ fakti สร้างเอง')
+    }
+    if (!git.isValidBranchName(name)) {
+      throw new HttpError(400, 'ชื่อ branch ใช้ได้แค่ a-z 0-9 . _ / -')
+    }
+    if (name === session.branch) return session
+
+    const workspace = this.workspace(session.workspaceId)
+    if (!workspace) throw new HttpError(400, 'workspace ของ session นี้ถูกลบไปแล้ว')
+
+    if (!(await git.branchExists(workspace.path, session.branch))) {
+      throw new HttpError(404, `ไม่พบ branch ${session.branch} — ถูกเปลี่ยนชื่อหรือลบไปแล้วหรือเปล่า`)
+    }
+    if (await git.branchExists(workspace.path, name)) {
+      throw new HttpError(409, `มี branch ${name} อยู่แล้ว — ตั้งชื่ออื่น`)
+    }
+
+    await git.renameBranch(workspace.path, session.branch, name)
+    session.branch = name
+    this.persist()
+    return session
+  }
+
   /** ปิด pty แต่เก็บ branch ไว้ */
   async close(id: string): Promise<Session> {
     const session = this.record(id)
@@ -424,7 +513,10 @@ export class SessionManager {
     return session
   }
 
-  /** reset + กลับ base branch + ลบ branch ที่ pat สร้าง */
+  /**
+   * created → reset + กลับ base branch + ลบ branch ทิ้ง
+   * existing → ย้อนแค่งานรอบนี้ ไม่แตะ branch เพราะเป็นของผู้ใช้อยู่ก่อนแล้ว
+   */
   async discard(id: string): Promise<Session> {
     const session = this.record(id)
     if (!session) throw new HttpError(404, 'ไม่พบ session')
@@ -432,7 +524,11 @@ export class SessionManager {
     if (!workspace) throw new HttpError(400, 'workspace ของ session นี้ถูกลบไปแล้ว')
 
     await this.killPty(id)
-    await git.discard(workspace.path, session.branch, workspace.baseBranch, session.createdBranch)
+    if (session.branchOwnership === 'created') {
+      await git.discardCreated(workspace.path, session.branch, workspace.baseBranch)
+    } else {
+      await git.discardExisting(workspace.path, session.baseCommit)
+    }
     this.finish(id, 'closed')
     return session
   }
@@ -480,6 +576,11 @@ export class HttpError extends Error {
   constructor(readonly status: number, message: string) {
     super(message)
   }
+}
+
+/** ชื่อที่เอาไปติดใน stash message — บอกได้ว่า stash นี้มาจากงานไหน */
+function branchLabel(choice: BranchChoice, currentBranch: string): string {
+  return choice.kind === 'current' ? currentBranch : choice.name
 }
 
 export class DirtyError extends Error {

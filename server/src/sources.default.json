@@ -1,0 +1,36 @@
+{
+  "activeSourceId": "mock",
+  "sources": [
+    {
+      "id": "mock",
+      "label": "ตัวอย่างในเครื่อง (ไม่ต่อเน็ต)",
+      "network": "public",
+      "baseUrl": "/api/mock",
+      "vars": [],
+      "list": {
+        "method": "GET",
+        "path": "/defects"
+      },
+      "itemsPath": "",
+      "map": {
+        "id": "id",
+        "key": "key",
+        "title": "title",
+        "description": "description",
+        "severity": "severity",
+        "status": "status",
+        "reporter": "reporter",
+        "createdAt": "createdAt"
+      },
+      "openStatuses": [
+        "open"
+      ],
+      "severityOrder": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ]
+    }
+  ]
+}

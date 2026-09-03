@@ -1,21 +1,35 @@
 import { execFile } from 'node:child_process'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import type { DirtyConflict } from '@shared/types'
+import type { DirtyConflict, QaPromptPayload } from '@shared/types'
 import { readWorkspaces } from '../core/config'
 import * as git from '../core/git'
 import { DirtyError, HttpError, type SessionManager } from '../core/session'
-import { allDefects } from './defects'
+import { resolveDefects } from '../core/source/service'
+
+const branchChoice = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('new'), name: z.string().min(1), from: z.string().min(1) }),
+  z.object({ kind: z.literal('existing'), name: z.string().min(1) }),
+  z.object({ kind: z.literal('current') }),
+])
 
 const createBody = z.object({
   workspaceId: z.string().min(1),
   defectIds: z.array(z.string().min(1)).min(1),
-  branch: z.string().min(1),
+  branch: branchChoice,
   dirtyStrategy: z.enum(['stash', 'keep']).optional(),
 })
 
 const appendBody = z.object({
   defectIds: z.array(z.string().min(1)).min(1),
+})
+
+const renameBody = z.object({
+  name: z.string().min(1),
+})
+
+const qaBody = z.object({
+  prompt: z.string().trim().min(1),
 })
 
 export function sessionRoutes(manager: SessionManager): Hono {
@@ -28,17 +42,16 @@ export function sessionRoutes(manager: SessionManager): Hono {
     if (!parsed.success) return c.json({ error: 'ข้อมูลไม่ครบ' }, 400)
     const { workspaceId, defectIds, branch, dirtyStrategy } = parsed.data
 
-    if (!git.isValidBranchName(branch)) {
+    if (branch.kind !== 'current' && !git.isValidBranchName(branch.name)) {
       return c.json({ error: 'ชื่อ branch ใช้ได้แค่ a-z 0-9 . _ / -' }, 400)
     }
 
     const workspace = readWorkspaces().find(w => w.id === workspaceId)
     if (!workspace) return c.json({ error: 'ไม่พบ workspace' }, 404)
 
-    const defects = allDefects().filter(d => defectIds.includes(d.id))
-    if (defects.length !== defectIds.length) return c.json({ error: 'มี defect ที่หาไม่เจอ' }, 400)
-
     try {
+      // ดึงรายละเอียดเต็มตรงนี้ เพราะ prompt ที่ส่งให้ agent ต้องมี description
+      const defects = await resolveDefects(workspace, defectIds)
       return c.json(await manager.create({ workspace, defects, branch, dirtyStrategy }), 201)
     } catch (err) {
       return errorResponse(c, err)
@@ -54,6 +67,16 @@ export function sessionRoutes(manager: SessionManager): Hono {
   app.get('/:id/diff', async c => {
     try {
       return c.json(await manager.diff(c.req.param('id')))
+    } catch (err) {
+      return errorResponse(c, err)
+    }
+  })
+
+  app.post('/:id/rename', async c => {
+    const parsed = renameBody.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return c.json({ error: 'ต้องระบุชื่อ branch ใหม่' }, 400)
+    try {
+      return c.json(await manager.rename(c.req.param('id'), parsed.data.name))
     } catch (err) {
       return errorResponse(c, err)
     }
@@ -88,11 +111,33 @@ export function sessionRoutes(manager: SessionManager): Hono {
     const parsed = appendBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'ข้อมูลไม่ครบ' }, 400)
 
-    const defects = allDefects().filter(d => parsed.data.defectIds.includes(d.id))
-    if (defects.length !== parsed.data.defectIds.length) return c.json({ error: 'มี defect ที่หาไม่เจอ' }, 400)
+    const session = manager.record(c.req.param('id'))
+    if (!session) return c.json({ error: 'ไม่พบ session' }, 404)
+    const workspace = readWorkspaces().find(w => w.id === session.workspaceId)
 
     try {
+      const defects = await resolveDefects(workspace, parsed.data.defectIds)
       return c.json(await manager.append(c.req.param('id'), defects))
+    } catch (err) {
+      return errorResponse(c, err)
+    }
+  })
+
+  // QA Gate — GET เอาร่างที่เติมแล้วไปให้ผู้ใช้อ่าน POST ส่งฉบับที่ผู้ใช้ยืนยันเข้า pty
+  app.get('/:id/qa-prompt', async c => {
+    try {
+      const body: QaPromptPayload = { prompt: await manager.qaPrompt(c.req.param('id')) }
+      return c.json(body)
+    } catch (err) {
+      return errorResponse(c, err)
+    }
+  })
+
+  app.post('/:id/qa', async c => {
+    const parsed = qaBody.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return c.json({ error: 'prompt ว่างเปล่า' }, 400)
+    try {
+      return c.json(manager.sendQa(c.req.param('id'), parsed.data.prompt))
     } catch (err) {
       return errorResponse(c, err)
     }
