@@ -6,7 +6,7 @@ import type {
 } from '@shared/types'
 import { isProtectedBranch, protectedBranchesFor, readSessions, writeSessions } from './config'
 import * as git from './git'
-import { buildPrompt, writeTaskFile } from './prompt'
+import { QA_FILE, buildPrompt, buildQaPrompt, writeTaskFile } from './prompt'
 
 /** output ที่เก็บไว้ให้ client ที่ต่อใหม่ ~200KB ต่อ session */
 const REPLAY_BUFFER_BYTES = 200 * 1024
@@ -272,6 +272,29 @@ export class SessionManager {
 
     const line = writeTaskFile(live.cwd, buildPrompt(fresh))
     live.pty.write(`${line}\r`)
+    this.persist()
+    return session
+  }
+
+  /** prompt QA Gate ที่เติมข้อมูลของ session นี้ให้แล้ว — ให้ผู้ใช้อ่าน/แก้ก่อนส่ง */
+  async qaPrompt(id: string): Promise<string> {
+    const session = this.record(id)
+    if (!session) throw new HttpError(404, 'ไม่พบ session')
+    const files = await this.diff(id).then(d => d.files.map(f => f.path)).catch(() => [])
+    return buildQaPrompt(session.defects, files)
+  }
+
+  /** ส่ง prompt QA (ที่ผู้ใช้ตรวจแล้ว) เข้า pty เดิม — ผู้ใช้เป็นคนเลือกจังหวะเอง */
+  sendQa(id: string, prompt: string): Session {
+    const session = this.record(id)
+    if (!session) throw new HttpError(404, 'ไม่พบ session')
+    const live = this.live.get(id)
+    if (!live || live.exited) throw new HttpError(409, 'session นี้ปิดไปแล้ว')
+
+    session.lastActivityAt = new Date().toISOString()
+    const line = writeTaskFile(live.cwd, prompt, QA_FILE)
+    live.pty.write(`${line}\r`)
+    live.lastOutputAt = Date.now()
     this.persist()
     return session
   }

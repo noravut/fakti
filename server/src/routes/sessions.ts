@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import type { DirtyConflict } from '@shared/types'
+import type { DirtyConflict, QaPromptPayload } from '@shared/types'
 import { readWorkspaces } from '../core/config'
 import * as git from '../core/git'
 import { DirtyError, HttpError, type SessionManager } from '../core/session'
@@ -26,6 +26,10 @@ const appendBody = z.object({
 
 const renameBody = z.object({
   name: z.string().min(1),
+})
+
+const qaBody = z.object({
+  prompt: z.string().trim().min(1),
 })
 
 export function sessionRoutes(manager: SessionManager): Hono {
@@ -114,6 +118,26 @@ export function sessionRoutes(manager: SessionManager): Hono {
     try {
       const defects = await resolveDefects(workspace, parsed.data.defectIds)
       return c.json(await manager.append(c.req.param('id'), defects))
+    } catch (err) {
+      return errorResponse(c, err)
+    }
+  })
+
+  // QA Gate — GET เอาร่างที่เติมแล้วไปให้ผู้ใช้อ่าน POST ส่งฉบับที่ผู้ใช้ยืนยันเข้า pty
+  app.get('/:id/qa-prompt', async c => {
+    try {
+      const body: QaPromptPayload = { prompt: await manager.qaPrompt(c.req.param('id')) }
+      return c.json(body)
+    } catch (err) {
+      return errorResponse(c, err)
+    }
+  })
+
+  app.post('/:id/qa', async c => {
+    const parsed = qaBody.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return c.json({ error: 'prompt ว่างเปล่า' }, 400)
+    try {
+      return c.json(manager.sendQa(c.req.param('id'), parsed.data.prompt))
     } catch (err) {
       return errorResponse(c, err)
     }

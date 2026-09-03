@@ -1,6 +1,7 @@
 import type {
   BootstrapResponse, BranchInfo, CheckResult, CreateSessionBody, Defect, DefectListResponse,
-  DiffStat, DirtyConflict, FetchMode, GitStatus, Session, Settings, SourceConfig, ValidateResult,
+  DiffStat, DirtyConflict, FetchMode, GitStatus, QaPromptPayload, Session, Settings, SourceConfig,
+  ValidateResult,
   Workspace, WorkspaceColor,
 } from '@shared/types'
 
@@ -92,5 +93,7 @@ export const api = {
     discard: (id: string) => post<Session>(`/api/sessions/${id}/discard`),
     reopen: (id: string) => post<Session>(`/api/sessions/${id}/reopen`),
     openEditor: (id: string) => post<{ ok: true }>(`/api/sessions/${id}/open-editor`),
+    qaPrompt: (id: string) => req<QaPromptPayload>(`/api/sessions/${id}/qa-prompt`),
+    sendQa: (id: string, prompt: string) => post<Session>(`/api/sessions/${id}/qa`, { prompt }),
   },
 }

@@ -33,6 +33,10 @@ export function Session({ id }: { id: string }) {
   const [renaming, setRenaming] = useState(false)
   const [renameTo, setRenameTo] = useState('')
   const [takenBranches, setTakenBranches] = useState<string[]>([])
+  // QA Gate — ร่างที่ server เติมให้ ผู้ใช้อ่าน/แก้ในนี้ก่อนส่ง
+  const [qaOpen, setQaOpen] = useState(false)
+  const [qaText, setQaText] = useState('')
+  const [qaLoading, setQaLoading] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const workspace = workspaces.find(w => w.id === session?.workspaceId)
@@ -110,6 +114,20 @@ export function Session({ id }: { id: string }) {
       },
       () => setRenaming(false),
     )
+  }
+
+  async function openQa() {
+    setQaOpen(true)
+    setQaLoading(true)
+    setError(null)
+    try {
+      setQaText((await api.sessions.qaPrompt(id)).prompt)
+    } catch (err) {
+      setQaOpen(false)
+      setError(err instanceof Error ? err.message : 'เตรียม prompt QA ไม่ได้')
+    } finally {
+      setQaLoading(false)
+    }
   }
 
   async function act(fn: () => Promise<unknown>, then?: () => void) {
@@ -290,12 +308,64 @@ export function Session({ id }: { id: string }) {
           <span className="font-mono text-[13px] text-pine">+{diff?.totalAdded ?? 0}</span>
           <span className="font-mono text-[13px] text-danger">−{diff?.totalRemoved ?? 0}</span>
           <span className="flex-1" />
+          <Button
+            disabled={busy || !session.live}
+            title={session.live ? 'ส่ง prompt QA Gate ให้ claude ทวนงานที่แก้' : 'session ปิดไปแล้ว'}
+            onClick={() => void openQa()}
+          >
+            ตรวจ QA
+          </Button>
           <Button disabled={busy} onClick={() => void act(() => api.sessions.openEditor(id))}>
             เปิดใน VSCode
           </Button>
           <Button onClick={() => navigate(`/session/${id}/summary`)}>ดูสรุป</Button>
         </div>
       </Card>
+
+      {qaOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9">
+          <button
+            type="button"
+            aria-label="ปิดหน้าต่าง"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setQaOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative flex max-h-full w-[760px] max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-[22px]"
+          >
+            <span className="text-base font-semibold">ตรวจ QA ก่อนส่งมอบ</span>
+            <span className="text-[13px] text-muted">
+              fakti เติมชื่อ defect กับไฟล์ที่เปลี่ยนจาก git ให้แล้ว ส่วนที่เหลือ claude จะสรุปเองจาก
+              บทสนทนาที่ทำมา — อ่านและแก้ได้ทุกบรรทัดก่อนส่ง
+            </span>
+            {state === 'working' && (
+              <span className="text-[13px] text-warn-deep">
+                claude ยังทำงานอยู่ — ส่งตอนนี้ข้อความจะเข้าคิวรอจนงานปัจจุบันจบ
+              </span>
+            )}
+            <textarea
+              value={qaText}
+              disabled={qaLoading}
+              spellCheck={false}
+              onChange={e => setQaText(e.target.value)}
+              className="min-h-[50vh] w-full resize-y rounded border border-line bg-paper px-3 py-2 font-mono text-[13px] leading-[1.6] text-ink disabled:text-faint"
+              placeholder={qaLoading ? 'กำลังเตรียม prompt…' : ''}
+            />
+            <div className="mt-1 flex justify-end gap-2.5">
+              <Button onClick={() => setQaOpen(false)} disabled={busy}>ยกเลิก</Button>
+              <Button
+                variant="primary"
+                disabled={busy || qaLoading || qaText.trim() === ''}
+                onClick={() => void act(() => api.sessions.sendQa(id, qaText), () => setQaOpen(false))}
+              >
+                ส่งให้ตรวจ
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {renaming && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9">
