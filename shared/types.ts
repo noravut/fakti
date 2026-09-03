@@ -283,6 +283,11 @@ export interface DirtyConflict {
   branch: string
 }
 
+/** prompt QA Gate — server เติมให้ก่อน ผู้ใช้อ่าน/แก้ แล้วส่งกลับมาทั้งก้อน */
+export interface QaPromptPayload {
+  prompt: string
+}
+
 export interface Settings {
   activeWorkspaceId: string | null
   activeSourceId: string | null
