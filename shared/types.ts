@@ -274,6 +274,13 @@ export interface CreateSessionBody {
   defectIds: string[]
   branch: BranchChoice
   dirtyStrategy?: DirtyStrategy
+  /** prompt ที่ผู้ใช้อ่าน/แก้แล้วจาก preview — ไม่ส่งมา = ให้ server สร้างเอง */
+  prompt?: string
+}
+
+/** ร่าง prompt ที่จะเขียนลง .pat-task.md — ให้ผู้ใช้อ่าน/แก้ก่อนเริ่ม session */
+export interface TaskPromptPayload {
+  prompt: string
 }
 
 /** 409 ตอน working tree สกปรกและ client ยังไม่ได้เลือกทาง */

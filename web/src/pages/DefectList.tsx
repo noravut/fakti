@@ -150,6 +150,7 @@ export function DefectList() {
         defectIds: selected,
         branch: payload.branch,
         dirtyStrategy: payload.dirtyStrategy,
+        prompt: payload.prompt,
       })
 
     await refreshSessions()

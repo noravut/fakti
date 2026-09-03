@@ -137,6 +137,8 @@ export class SessionManager {
     defects: Defect[]
     branch: BranchChoice
     dirtyStrategy?: DirtyStrategy
+    /** ฉบับที่ผู้ใช้อ่าน/แก้แล้วจาก preview — ไม่มี = สร้างจาก defects ตามปกติ */
+    prompt?: string
   }): Promise<Session> {
     const { workspace, defects, branch, dirtyStrategy } = input
 
@@ -176,7 +178,7 @@ export class SessionManager {
       branchOwnership: ownership,
     }
 
-    this.spawn(session, buildPrompt(defects))
+    this.spawn(session, input.prompt ?? buildPrompt(defects))
 
     this.records.push(session)
     this.persist()

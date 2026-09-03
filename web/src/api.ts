@@ -1,7 +1,7 @@
 import type {
   BootstrapResponse, BranchInfo, CheckResult, CreateSessionBody, Defect, DefectListResponse,
   DiffStat, DirtyConflict, FetchMode, GitStatus, QaPromptPayload, Session, Settings, SourceConfig,
-  ValidateResult,
+  TaskPromptPayload, ValidateResult,
   Workspace, WorkspaceColor,
 } from '@shared/types'
 
@@ -86,6 +86,8 @@ export const api = {
     list: () => req<Session[]>('/api/sessions'),
     get: (id: string) => req<Session & { live: boolean }>(`/api/sessions/${id}`),
     create: (body: CreateSessionBody) => post<Session>('/api/sessions', body),
+    previewPrompt: (workspaceId: string, defectIds: string[]) =>
+      post<TaskPromptPayload>('/api/sessions/preview-prompt', { workspaceId, defectIds }),
     append: (id: string, defectIds: string[]) => post<Session>(`/api/sessions/${id}/append`, { defectIds }),
     diff: (id: string) => req<DiffStat>(`/api/sessions/${id}/diff`),
     rename: (id: string, name: string) => post<Session>(`/api/sessions/${id}/rename`, { name }),

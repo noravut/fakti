@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import type { DirtyConflict, QaPromptPayload } from '@shared/types'
+import type { DirtyConflict, QaPromptPayload, TaskPromptPayload } from '@shared/types'
 import { readWorkspaces } from '../core/config'
 import * as git from '../core/git'
+import { buildPrompt } from '../core/prompt'
 import { DirtyError, HttpError, type SessionManager } from '../core/session'
 import { resolveDefects } from '../core/source/service'
 
@@ -18,6 +19,12 @@ const createBody = z.object({
   defectIds: z.array(z.string().min(1)).min(1),
   branch: branchChoice,
   dirtyStrategy: z.enum(['stash', 'keep']).optional(),
+  prompt: z.string().trim().min(1).optional(),
+})
+
+const previewBody = z.object({
+  workspaceId: z.string().min(1),
+  defectIds: z.array(z.string().min(1)).min(1),
 })
 
 const appendBody = z.object({
@@ -52,7 +59,25 @@ export function sessionRoutes(manager: SessionManager): Hono {
     try {
       // ดึงรายละเอียดเต็มตรงนี้ เพราะ prompt ที่ส่งให้ agent ต้องมี description
       const defects = await resolveDefects(workspace, defectIds)
-      return c.json(await manager.create({ workspace, defects, branch, dirtyStrategy }), 201)
+      return c.json(
+        await manager.create({ workspace, defects, branch, dirtyStrategy, prompt: parsed.data.prompt }),
+        201,
+      )
+    } catch (err) {
+      return errorResponse(c, err)
+    }
+  })
+
+  // ร่าง prompt ที่จะเขียนลง .pat-task.md — ผู้ใช้อ่าน/แก้ใน dialog ก่อนกดเริ่ม
+  app.post('/preview-prompt', async c => {
+    const parsed = previewBody.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return c.json({ error: 'ข้อมูลไม่ครบ' }, 400)
+    const workspace = readWorkspaces().find(w => w.id === parsed.data.workspaceId)
+    if (!workspace) return c.json({ error: 'ไม่พบ workspace' }, 404)
+    try {
+      const defects = await resolveDefects(workspace, parsed.data.defectIds)
+      const body: TaskPromptPayload = { prompt: buildPrompt(defects) }
+      return c.json(body)
     } catch (err) {
       return errorResponse(c, err)
     }

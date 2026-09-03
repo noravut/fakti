@@ -16,6 +16,8 @@ export interface ConfirmPayload {
   branch: BranchChoice
   sessionId?: string
   dirtyStrategy?: DirtyStrategy
+  /** prompt ที่ผู้ใช้อ่าน/แก้แล้ว — ไม่ส่ง = ให้ server สร้างเอง */
+  prompt?: string
 }
 
 interface Props {
@@ -46,6 +48,11 @@ export function ConfirmDialog({
   const [branches, setBranches] = useState<BranchInfo[]>([])
   const [branchError, setBranchError] = useState<string | null>(null)
 
+  // ร่าง prompt ที่จะเขียนลง .pat-task.md — ผู้ใช้เปิดดู/แก้ได้ก่อนเริ่ม
+  const [prompt, setPrompt] = useState('')
+  const [promptOpen, setPromptOpen] = useState(false)
+  const [promptError, setPromptError] = useState<string | null>(null)
+
   const nameRef = useRef<HTMLInputElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
 
@@ -63,6 +70,20 @@ export function ConfirmDialog({
         if (!cancelled) setBranchError(err instanceof Error ? err.message : 'อ่านรายชื่อ branch ไม่ได้')
       })
     return () => { cancelled = true }
+  }, [workspace.id])
+
+  useEffect(() => {
+    let cancelled = false
+    void api.sessions.previewPrompt(workspace.id, defects.map(d => d.id))
+      .then(res => {
+        if (!cancelled) setPrompt(res.prompt)
+      })
+      .catch(() => {
+        // โหลดร่างไม่ได้ไม่ถึงกับบล็อก — เริ่มได้ แต่ server จะสร้าง prompt เองแบบเดิม
+        if (!cancelled) setPromptError('โหลดร่าง prompt ไม่ได้ — ถ้าเริ่มเลย ระบบจะสรุปให้เองแบบเดิม')
+      })
+    return () => { cancelled = true }
+    // defects ถูกเลือกจบก่อนเปิด dialog — ยึดชุดตอน mount พอ
   }, [workspace.id])
 
   // Esc ปิดได้เสมอ ไม่ว่า focus จะอยู่ตรงไหนใน dialog
@@ -143,7 +164,7 @@ export function ConfirmDialog({
       await onSubmit(
         mode === 'append'
           ? { mode: 'append', branch: choice(), sessionId }
-          : { mode: 'new', branch: choice(), dirtyStrategy },
+          : { mode: 'new', branch: choice(), dirtyStrategy, prompt: prompt.trim() ? prompt : undefined },
       )
     } catch (err) {
       const conflict = err instanceof ApiError ? err.dirty : null
@@ -169,7 +190,8 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-label={`เริ่มแก้ ${defects.length} รายการ`}
         onKeyDown={e => {
-          if (e.key === 'Enter' && !e.shiftKey && (e.target as HTMLElement).tagName !== 'SELECT') {
+          const tag = (e.target as HTMLElement).tagName
+          if (e.key === 'Enter' && !e.shiftKey && tag !== 'SELECT' && tag !== 'TEXTAREA') {
             void submit()
           }
         }}
@@ -374,6 +396,34 @@ export function ConfirmDialog({
             </div>
           ))}
         </div>
+
+        {mode !== 'append' && (
+          <div className="flex min-w-0 flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => setPromptOpen(o => !o)}
+              className="self-start text-[13px] text-pine underline hover:text-pine-deep"
+            >
+              {promptOpen ? 'ซ่อน prompt ที่จะส่งให้ claude' : 'ดู/แก้ prompt ที่จะส่งให้ claude'}
+            </button>
+            {promptError && <span className="text-[13px] text-warn-deep">{promptError}</span>}
+            {promptOpen && (
+              <>
+                <span className="text-[13px] text-muted">
+                  เนื้อหานี้จะถูกเขียนลง .pat-task.md ให้ claude อ่านเป็นงานตั้งต้น — แก้ได้ทุกบรรทัด
+                  ลบทิ้งทั้งหมด = ให้ระบบสรุปเองแบบเดิม
+                </span>
+                <textarea
+                  value={prompt}
+                  spellCheck={false}
+                  onChange={e => setPrompt(e.target.value)}
+                  placeholder={promptError ? '' : prompt === '' ? 'กำลังเตรียม prompt…' : ''}
+                  className="min-h-[240px] w-full resize-y rounded border border-line bg-paper px-3 py-2 font-mono text-[13px] leading-[1.6] text-ink"
+                />
+              </>
+            )}
+          </div>
+        )}
 
         {error && <span className="whitespace-pre-wrap text-[13px] text-danger">{error}</span>}
 
