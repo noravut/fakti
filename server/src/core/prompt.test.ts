@@ -57,7 +57,7 @@ test('buildFeaturePrompt ใส่ชื่อ ข้อมูลประกอ
 
 test('buildFeaturePrompt ไม่มี context ก็ไม่ทิ้งบรรทัดว่างแปลกๆ', () => {
   const out = buildFeaturePrompt({ ...feature, context: undefined })
-  assert.match(out, /^# Export CSV\n\n## สิ่งที่ต้องทำได้/)
+  assert.match(out, /^# Export CSV\n\n## สิ่งที่ต้องเป็นเมื่อทำเสร็จ/)
 })
 
 test('buildFeatureQaPrompt เติมชื่อ + ทุก REQ + ไฟล์ และใช้ขั้นตัดสินรายข้อ ไม่ใช่ของ defect', () => {
