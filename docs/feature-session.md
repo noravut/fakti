@@ -73,9 +73,10 @@ CreateSessionBody.feature?: FeatureSpec   // มี feature → defectIds ว่
 ไฟล์เดิม `.pat-task.md` / `.pat-qa.md` กลไกส่งเข้า pty เดิม
 
 **เริ่มงาน** `buildFeaturePrompt(feature)`
-ชื่อ → ข้อมูลประกอบ → รายการ REQ → กติกา: อ่านโค้ดตาม pattern ของ repo ก่อน,
-REQ กำกวมให้ถามก่อนลงมือ, ทำครบทุกข้อและไม่เพิ่มสิ่งที่ไม่ได้ขอ, test ถ้า repo มี,
-commit แยกตามข้อใส่ `REQ-n`, ห้าม push/เพิ่ม dependency, จบแล้วสรุปตาราง REQ → ทำที่ไหน/ทดสอบยังไง
+ชื่อ → ข้อมูลประกอบ → รายการ REQ → process 3 ขั้น (ที่มาใน `requirement-prompt-research.md`):
+ขั้น 1 เขียน spec ก่อนโค้ด (ปัญหา/ผู้ใช้, ไม่ทำ, REQ เขียนใหม่ให้ตรวจได้, เกณฑ์รับงาน Given-When-Then,
+ขอบเคส, จุดเสี่ยง, คำถามที่ติด — มีคำถามค้างให้หยุดรอ) → ขั้น 2 ลงมือทีละ REQ commit ใส่ `REQ-n`
+→ ขั้น 3 ตารางตรวจเอง REQ × เกณฑ์ × หลักฐาน × ไฟล์ × สถานะ
 
 **ทวน requirement** `buildFeatureQaPrompt(feature, changedFiles)`
 ส่วนที่ใช้ร่วมกับ QA Gate เดิม (บทบาท QA/DEV, ขอบเขต, ทดสอบจริงห้ามอ่านโค้ด,

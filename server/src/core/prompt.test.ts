@@ -53,6 +53,19 @@ test('buildFeaturePrompt ใส่ชื่อ ข้อมูลประกอ
   assert.match(out, /- REQ-1: กด Export ได้ไฟล์/)
   assert.match(out, /- REQ-2: หัวคอลัมน์เป็นไทย/)
   assert.match(out, /REQ-n ใน commit message/)
+  // process 3 ขั้น: spec ก่อนโค้ด → ลงมือ → ตรวจเอง และด่านหยุดเมื่อมีคำถามที่ติด
+  assert.match(out, /# ขั้น 1 - ทำความเข้าใจและเขียน spec ก่อนลงมือ/)
+  assert.match(out, /ไม่ทำ\s+สิ่งที่คนอาจคิดว่าอยู่ในงานนี้/)
+  assert.match(out, /กำหนดให้ <สภาพตั้งต้น> · เมื่อ <ทำอะไร> · แล้ว <เห็นอะไร>/)
+  assert.match(out, /มีคำถามที่ติดแม้ข้อเดียว ให้หยุดรอคำตอบ/)
+  assert.match(out, /# ขั้น 2 - ลงมือ/)
+  assert.match(out, /# ขั้น 3 - ตรวจเองก่อนส่ง/)
+  assert.ok(out.indexOf('# ขั้น 1') < out.indexOf('# ขั้น 2') && out.indexOf('# ขั้น 2') < out.indexOf('# ขั้น 3'))
+})
+
+test('buildFeatureQaPrompt ให้ QA ใช้ spec ของ DEV เป็นฐานแต่ทวนกับคำเดิมของ REQ', () => {
+  const out = buildFeatureQaPrompt(feature, [])
+  assert.match(out, /ต้องทวนกับคำเดิมของ REQ ข้างบนทุกข้อ/)
 })
 
 test('buildFeaturePrompt ไม่มี context ก็ไม่ทิ้งบรรทัดว่างแปลกๆ', () => {
