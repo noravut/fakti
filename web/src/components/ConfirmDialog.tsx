@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { BranchChoice, BranchInfo, Defect, DirtyStrategy, Session, Workspace } from '@shared/types'
+import type {
+  BranchChoice, BranchInfo, Defect, DirtyStrategy, FeatureSpec, Session, Workspace,
+} from '@shared/types'
 import { ApiError, api } from '../api'
-import { relativeTime, suggestBranch } from '../format'
+import { relativeTime, suggestBranch, suggestFeatureBranch } from '../format'
 import { Button, Input } from './ui'
 import { WorkspaceChip } from './WorkspaceChip'
 
@@ -21,7 +23,10 @@ export interface ConfirmPayload {
 }
 
 interface Props {
+  /** defect จาก tracker — feature session ส่ง [] มา */
   defects: Defect[]
+  /** มีค่า = เริ่ม feature session แทนการแก้ defect */
+  feature?: FeatureSpec
   workspace: Workspace
   /** session ที่ยังเปิดอยู่บน workspace นี้ — ให้เลือก "ต่อใน session ที่เปิดอยู่" ได้ */
   openSessions: Session[]
@@ -32,7 +37,7 @@ interface Props {
 }
 
 export function ConfirmDialog({
-  defects, workspace, openSessions, dirtyCount, onCancel, onSubmit,
+  defects, feature, workspace, openSessions, dirtyCount, onCancel, onSubmit,
 }: Props) {
   const [mode, setMode] = useState<Mode>('new')
   const [sessionId, setSessionId] = useState(openSessions[0]?.id ?? '')
@@ -41,7 +46,7 @@ export function ConfirmDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [name, setName] = useState(() => suggestBranch(defects))
+  const [name, setName] = useState(() => (feature ? suggestFeatureBranch(feature.title) : suggestBranch(defects)))
   const [from, setFrom] = useState(workspace.baseBranch)
   const [existing, setExisting] = useState('')
   const [search, setSearch] = useState('')
@@ -74,7 +79,7 @@ export function ConfirmDialog({
 
   useEffect(() => {
     let cancelled = false
-    void api.sessions.previewPrompt(workspace.id, defects.map(d => d.id))
+    void api.sessions.previewPrompt(workspace.id, defects.map(d => d.id), feature)
       .then(res => {
         if (!cancelled) setPrompt(res.prompt)
       })
@@ -136,6 +141,12 @@ export function ConfirmDialog({
   const canUseCurrent = Boolean(current) && !onProtected
   const canAppend = openSessions.length > 0
 
+  // รายการที่โชว์ใต้หัว dialog — feature ใช้ REQ แทน defect
+  const items = feature
+    ? feature.requirements.map(r => ({ id: r.key, key: r.key, title: r.text }))
+    : defects
+  const heading = feature ? `เริ่มทำ ${feature.title}` : `เริ่มแก้ ${defects.length} รายการ`
+
   const ready =
     mode === 'append' ? sessionId !== ''
       : mode === 'existing' ? existing !== ''
@@ -188,7 +199,7 @@ export function ConfirmDialog({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label={`เริ่มแก้ ${defects.length} รายการ`}
+        aria-label={heading}
         onKeyDown={e => {
           const tag = (e.target as HTMLElement).tagName
           if (e.key === 'Enter' && !e.shiftKey && tag !== 'SELECT' && tag !== 'TEXTAREA') {
@@ -227,7 +238,7 @@ export function ConfirmDialog({
           </div>
         )}
 
-        <span className="text-base font-semibold">เริ่มแก้ {defects.length} รายการ</span>
+        <span className="text-base font-semibold">{heading}</span>
 
         <div className="flex min-w-0 items-center gap-2">
           <WorkspaceChip workspace={workspace} />
@@ -388,7 +399,7 @@ export function ConfirmDialog({
 
         <div className="flex min-w-0 flex-col gap-2">
           <span className="text-[13px] text-faint">รวมอยู่ใน</span>
-          {defects.map((d, i) => (
+          {items.map((d, i) => (
             <div key={d.id} className="flex min-w-0 items-center gap-2.5">
               <span className="w-4 shrink-0 text-right font-mono text-[13px] text-faint">{i + 1}.</span>
               <span className="shrink-0 font-mono text-[13px] font-medium">{d.key}</span>
@@ -430,7 +441,7 @@ export function ConfirmDialog({
         <div className="mt-1 flex justify-end gap-2.5">
           <Button onClick={onCancel} disabled={busy}>ยกเลิก</Button>
           <Button variant="primary" disabled={!canSubmit} onClick={() => void submit()}>
-            {busy ? 'กำลังเริ่ม…' : 'เริ่มแก้'}
+            {busy ? 'กำลังเริ่ม…' : feature ? 'เริ่มทำ' : 'เริ่มแก้'}
           </Button>
         </div>
       </div>

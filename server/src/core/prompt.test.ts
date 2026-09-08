@@ -34,3 +34,43 @@ test('buildQaPrompt ตัดรายชื่อไฟล์ที่ยาว
   assert.doesNotMatch(out, /f40\.ts/)
   assert.match(out, /และอีก 5 ไฟล์/)
 })
+
+// ── feature ────────────────────────────────────────────────────
+
+import type { FeatureSpec } from '@shared/types'
+import { buildFeaturePrompt, buildFeatureQaPrompt } from './prompt'
+
+const feature: FeatureSpec = {
+  title: 'Export CSV',
+  context: 'หน้า /reports',
+  requirements: [{ key: 'REQ-1', text: 'กด Export ได้ไฟล์' }, { key: 'REQ-2', text: 'หัวคอลัมน์เป็นไทย' }],
+}
+
+test('buildFeaturePrompt ใส่ชื่อ ข้อมูลประกอบ และทุก REQ พร้อมกติกา commit ตามข้อ', () => {
+  const out = buildFeaturePrompt(feature)
+  assert.match(out, /^# Export CSV/)
+  assert.match(out, /หน้า \/reports/)
+  assert.match(out, /- REQ-1: กด Export ได้ไฟล์/)
+  assert.match(out, /- REQ-2: หัวคอลัมน์เป็นไทย/)
+  assert.match(out, /REQ-n ใน commit message/)
+})
+
+test('buildFeaturePrompt ไม่มี context ก็ไม่ทิ้งบรรทัดว่างแปลกๆ', () => {
+  const out = buildFeaturePrompt({ ...feature, context: undefined })
+  assert.match(out, /^# Export CSV\n\n## สิ่งที่ต้องทำได้/)
+})
+
+test('buildFeatureQaPrompt เติมชื่อ + ทุก REQ + ไฟล์ และใช้ขั้นตัดสินรายข้อ ไม่ใช่ของ defect', () => {
+  const out = buildFeatureQaPrompt(feature, ['src/a.ts'])
+  assert.match(out, /งานที่กำลังทำ:\s+Export CSV\n\s+REQ-1: กด Export ได้ไฟล์\n\s+REQ-2: หัวคอลัมน์เป็นไทย/)
+  assert.match(out, /src\/a\.ts/)
+  assert.match(out, /## ขั้น 1 - จับคู่ทุก REQ กับ test case/)
+  assert.match(out, /## ขั้น 5 - ตัดสินรายข้อ/)
+  assert.match(out, /ตาราง REQ/)
+  assert.doesNotMatch(out, /ร้ายแรงแค่ไหน/)
+  // ส่วนที่ใช้ร่วมกับ QA Gate ยังอยู่ครบ
+  assert.match(out, /## บทบาท/)
+  assert.match(out, /## ขั้น 2 - ทดสอบจริง/)
+  assert.match(out, /# รอบ DEV/)
+  assert.match(out, /# รายงานสรุปตอนจบ/)
+})

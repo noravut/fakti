@@ -5,6 +5,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { GoHome } from './components/GoHome'
 import { Setup } from './pages/Setup'
 import { DefectList } from './pages/DefectList'
+import { FeatureNew } from './pages/FeatureNew'
 import { Session } from './pages/Session'
 import { Summary } from './pages/Summary'
 import { Sessions } from './pages/Sessions'
@@ -47,6 +48,7 @@ export function App() {
             <Route path="/setup" component={Setup} />
             <Route path="/settings" component={Settings} />
             <Route path="/sessions" component={Sessions} />
+            <Route path="/feature/new" component={FeatureNew} />
             <Route path="/session/:id/summary">{p => <Summary id={p.id} />}</Route>
             <Route path="/session/:id">{p => <Session id={p.id} />}</Route>
             <Route path="/">{needsSetup ? <Redirect to="/setup" /> : <DefectList />}</Route>

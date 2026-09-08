@@ -166,13 +166,35 @@ export type SessionState =
   | 'idle'         // ว่าง รอคำสั่ง
   | 'closed'
 
+// ── feature session ────────────────────────────────────────────
+// งานที่ไม่ได้มาจาก tracker — ผู้ใช้พิมพ์ requirement เอง แล้วให้ agent ทำและทวนความครบ
+
+export type SessionKind = 'defect' | 'feature'
+
+/** requirement 1 ข้อ — key คือ REQ-n ที่ fakti ตั้งให้ตามลำดับบรรทัด agent ใช้อ้างใน commit */
+export interface Requirement {
+  key: string
+  text: string
+}
+
+export interface FeatureSpec {
+  title: string
+  /** ข้อมูลประกอบ เช่น หน้าไหน ไฟล์ไหน ลิงก์ design — ว่างได้ */
+  context?: string
+  requirements: Requirement[]
+}
+
 export interface Session {
   id: string
   workspaceId: string
   branch: string
   baseCommit: string
+  /** 'defect' = แก้ defect จาก tracker (ค่าเดิม) · 'feature' = ทำตาม requirement ที่พิมพ์เอง */
+  kind: SessionKind
   defectIds: string[]
-  defects: Defect[]        // snapshot ตอนสร้าง
+  defects: Defect[]        // snapshot ตอนสร้าง · feature session = []
+  /** มีเมื่อ kind = 'feature' */
+  feature?: FeatureSpec
   state: SessionState
   createdAt: string
   lastActivityAt: string
@@ -271,7 +293,10 @@ export type DirtyStrategy = 'stash' | 'keep'
 
 export interface CreateSessionBody {
   workspaceId: string
+  /** ว่างได้เมื่อส่ง feature มา */
   defectIds: string[]
+  /** มีค่า = feature session — server ใช้ buildFeaturePrompt แทน */
+  feature?: FeatureSpec
   branch: BranchChoice
   dirtyStrategy?: DirtyStrategy
   /** prompt ที่ผู้ใช้อ่าน/แก้แล้วจาก preview — ไม่ส่งมา = ให้ server สร้างเอง */

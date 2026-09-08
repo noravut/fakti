@@ -92,19 +92,29 @@ export function Session({ id }: { id: string }) {
     }
   }, [state])
 
-  /** defect ไหนมี commit อ้างถึงแล้ว ถือว่าแก้เสร็จ — ที่เหลือเดาจากลำดับ */
-  const defectStatus = useMemo(() => {
+  const isFeature = session?.kind === 'feature'
+
+  /** แถวงานใต้ header — feature โชว์ REQ แทน defect ใช้โครงเดียวกัน */
+  const items = useMemo(
+    () => session?.feature
+      ? session.feature.requirements.map(r => ({ id: r.key, key: r.key, title: r.text }))
+      : session?.defects ?? [],
+    [session],
+  )
+
+  /** รายการไหนมี commit อ้างถึงรหัสแล้ว ถือว่าเสร็จ — ที่เหลือเดาจากลำดับ */
+  const itemStatus = useMemo(() => {
     const subjects = (diff?.commits ?? []).map(c => c.subject).join('\n')
-    const done = new Set(
-      (session?.defects ?? []).filter(d => subjects.includes(d.key)).map(d => d.id),
-    )
-    const nextUp = (session?.defects ?? []).find(d => !done.has(d.id))
-    return (defectId: string) => {
-      if (done.has(defectId)) return { label: '✓ แก้แล้ว', color: '#1F5F52' }
-      if (state === 'working' && nextUp?.id === defectId) return { label: '⟳ กำลังแก้', color: '#A66A0F' }
+    const done = new Set(items.filter(d => subjects.includes(d.key)).map(d => d.id))
+    const nextUp = items.find(d => !done.has(d.id))
+    return (itemId: string) => {
+      if (done.has(itemId)) return { label: isFeature ? '✓ ทำแล้ว' : '✓ แก้แล้ว', color: '#1F5F52' }
+      if (state === 'working' && nextUp?.id === itemId) {
+        return { label: isFeature ? '⟳ กำลังทำ' : '⟳ กำลังแก้', color: '#A66A0F' }
+      }
       return { label: '○ รออยู่', color: '#8E939C' }
     }
-  }, [diff, session, state])
+  }, [items, isFeature, diff, state])
 
   async function doRename() {
     await act(
@@ -177,7 +187,7 @@ export function Session({ id }: { id: string }) {
         <Header
           showWorkspace={false}
           crumbs={[
-            { label: 'Defect', href: '/' },
+            { label: isFeature ? 'Feature' : 'Defect', href: '/' },
             { label: session.branch, mono: true },
           ]}
         />
@@ -266,8 +276,8 @@ export function Session({ id }: { id: string }) {
         </div>
 
         <div className="border-b border-hair">
-          {session.defects.map(d => {
-            const status = defectStatus(d.id)
+          {items.map(d => {
+            const status = itemStatus(d.id)
             return (
               <div key={d.id} className="flex items-center gap-3 border-t border-hairline px-5 py-[9px] first:border-t-0">
                 <span className="font-mono text-[13px] font-medium">{d.key}</span>
@@ -310,10 +320,14 @@ export function Session({ id }: { id: string }) {
           <span className="flex-1" />
           <Button
             disabled={busy || !session.live}
-            title={session.live ? 'ส่ง prompt QA Gate ให้ claude ทวนงานที่แก้' : 'session ปิดไปแล้ว'}
+            title={
+              !session.live ? 'session ปิดไปแล้ว'
+                : isFeature ? 'ส่ง prompt ให้ claude สวมบท QA ตรวจว่าครบทุก REQ'
+                  : 'ส่ง prompt QA Gate ให้ claude ทวนงานที่แก้'
+            }
             onClick={() => void openQa()}
           >
-            ตรวจ QA
+            {isFeature ? 'ทวน requirement' : 'ตรวจ QA'}
           </Button>
           <Button disabled={busy} onClick={() => void act(() => api.sessions.openEditor(id))}>
             เปิดใน VSCode
@@ -335,10 +349,14 @@ export function Session({ id }: { id: string }) {
             aria-modal="true"
             className="relative flex max-h-full w-[760px] max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-[22px]"
           >
-            <span className="text-base font-semibold">ตรวจ QA ก่อนส่งมอบ</span>
+            <span className="text-base font-semibold">
+              {isFeature ? 'ทวน requirement ก่อนส่งมอบ' : 'ตรวจ QA ก่อนส่งมอบ'}
+            </span>
             <span className="text-[13px] text-muted">
-              fakti เติมชื่อ defect กับไฟล์ที่เปลี่ยนจาก git ให้แล้ว ส่วนที่เหลือ claude จะสรุปเองจาก
-              บทสนทนาที่ทำมา — อ่านและแก้ได้ทุกบรรทัดก่อนส่ง
+              {isFeature
+                ? 'fakti เติมชื่อ feature ทุก REQ และไฟล์ที่เปลี่ยนจาก git ให้แล้ว claude จะสวมบท QA ตัดสินทีละข้อว่าครบตามที่เขียนไหม'
+                : 'fakti เติมชื่อ defect กับไฟล์ที่เปลี่ยนจาก git ให้แล้ว ส่วนที่เหลือ claude จะสรุปเองจากบทสนทนาที่ทำมา'}
+              {' '}— อ่านและแก้ได้ทุกบรรทัดก่อนส่ง
             </span>
             {state === 'working' && (
               <span className="text-[13px] text-warn-deep">

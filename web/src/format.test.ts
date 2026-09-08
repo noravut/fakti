@@ -59,3 +59,24 @@ test('คำสั้นกว่า 3 ตัวอักษรถูกข้�
 test('ไม่มี defect เลยก็ไม่พัง', () => {
   assert.equal(suggestBranch([]), 'fix/defects')
 })
+
+// ── feature ────────────────────────────────────────────────────
+
+import { parseRequirements, suggestFeatureBranch } from './format'
+
+test('suggestFeatureBranch: feat/ + คำสำคัญจากชื่อ', () => {
+  assert.equal(suggestFeatureBranch('Export รายงานเป็น CSV จากหน้า reports'), 'feat/export-csv-reports')
+})
+
+test('suggestFeatureBranch: ชื่อไทยล้วนได้ค่าตั้งต้นที่ยังใช้ได้', () => {
+  assert.equal(suggestFeatureBranch('ส่งออกรายงาน'), 'feat/feature')
+})
+
+test('parseRequirements: บรรทัดละข้อ ตัด bullet/เลขข้อ ข้ามบรรทัดว่าง ตั้งรหัสตามลำดับ', () => {
+  const out = parseRequirements('- กด Export ได้ไฟล์\n\n2. หัวคอลัมน์เป็นไทย\n   \n• ดาวน์โหลดได้ทั้ง 2 ภาษา')
+  assert.deepEqual(out, [
+    { key: 'REQ-1', text: 'กด Export ได้ไฟล์' },
+    { key: 'REQ-2', text: 'หัวคอลัมน์เป็นไทย' },
+    { key: 'REQ-3', text: 'ดาวน์โหลดได้ทั้ง 2 ภาษา' },
+  ])
+})

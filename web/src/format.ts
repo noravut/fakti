@@ -1,4 +1,4 @@
-import type { Defect, Severity } from '@shared/types'
+import type { Defect, Requirement, Severity } from '@shared/types'
 
 export function relativeTime(iso: string): string {
   const then = new Date(iso).getTime()
@@ -85,6 +85,27 @@ export function suggestBranch(defects: Defect[]): string {
 
   const words = shared.length > 0 ? shared : keywords(first.title)
   return fit(`fix/${key}-plus${defects.length - 1}`, words.slice(0, 2))
+}
+
+/**
+ * เดาชื่อ branch ของ feature จากชื่อที่พิมพ์ — feat/export-csv-report
+ * ชื่อไทยล้วนไม่มีคำ ASCII เหลือ → feat/feature ให้ผู้ใช้แก้เอาเอง
+ */
+export function suggestFeatureBranch(title: string): string {
+  const [first, ...rest] = keywords(title)
+  return first ? fit(`feat/${first}`, rest.slice(0, 3)) : 'feat/feature'
+}
+
+/**
+ * แปลงข้อความที่พิมพ์บรรทัดละข้อเป็น requirement พร้อมรหัส REQ-n ตามลำดับ
+ * ตัด bullet หรือเลขข้อที่คนมักพิมพ์ติดมา (- * • 1. 2)) จะได้ไม่ซ้อนกับรหัสที่ตั้งให้
+ */
+export function parseRequirements(text: string): Requirement[] {
+  return text
+    .split('\n')
+    .map(line => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
+    .filter(Boolean)
+    .map((t, i) => ({ key: `REQ-${i + 1}`, text: t }))
 }
 
 /** แปลงข้อความคั่นจุลภาคเป็นรายชื่อ branch — ใช้ทั้งค่าตั้งต้นและค่าเฉพาะ repo */

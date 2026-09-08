@@ -129,7 +129,8 @@ export function DefectList() {
   })
 
   const openSessions = useMemo(
-    () => sessions.filter(s => s.state !== 'closed' && s.workspaceId === targetWorkspace?.id),
+    // ต่อได้เฉพาะ session ที่แก้ defect อยู่ — session feature มี requirement ของตัวเอง ไม่รับ defect เพิ่ม
+    () => sessions.filter(s => s.state !== 'closed' && s.kind !== 'feature' && s.workspaceId === targetWorkspace?.id),
     [sessions, targetWorkspace],
   )
 
@@ -181,6 +182,7 @@ export function DefectList() {
             <Button size="sm" onClick={() => void loadDefects(true)} disabled={defectsRefreshing}>
               โหลดใหม่
             </Button>
+            <Button size="sm" onClick={() => navigate('/feature/new')}>สร้าง feature</Button>
           </div>
         </div>
 

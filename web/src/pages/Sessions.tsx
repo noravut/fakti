@@ -51,7 +51,7 @@ export function Sessions() {
                   )}
                   <span className="font-mono text-[13px] font-medium">{s.branch}</span>
                   <span className="flex-1 truncate text-[13px] text-muted">
-                    {s.defects.map(d => d.key).join(' · ')}
+                    {s.feature ? s.feature.title : s.defects.map(d => d.key).join(' · ')}
                   </span>
                   <span className="text-[13px] text-faint">{relativeTime(s.createdAt)}</span>
                   <span className="w-[92px] text-right text-[13px]" style={{ color: state.color }}>

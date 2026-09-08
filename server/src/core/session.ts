@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import type { IPty } from 'node-pty'
 import type {
-  BranchChoice, BranchOwnership, Defect, DiffStat, DirtyStrategy, ServerMessage, Session,
-  SessionState, Workspace,
+  BranchChoice, BranchOwnership, Defect, DiffStat, DirtyStrategy, FeatureSpec, ServerMessage,
+  Session, SessionState, Workspace,
 } from '@shared/types'
 import { isProtectedBranch, protectedBranchesFor, readSessions, writeSessions } from './config'
 import * as git from './git'
-import { QA_FILE, buildPrompt, buildQaPrompt, writeTaskFile } from './prompt'
+import {
+  QA_FILE, buildFeaturePrompt, buildFeatureQaPrompt, buildPrompt, buildQaPrompt, writeTaskFile,
+} from './prompt'
 
 /** output ที่เก็บไว้ให้ client ที่ต่อใหม่ ~200KB ต่อ session */
 const REPLAY_BUFFER_BYTES = 200 * 1024
@@ -137,10 +139,12 @@ export class SessionManager {
     defects: Defect[]
     branch: BranchChoice
     dirtyStrategy?: DirtyStrategy
-    /** ฉบับที่ผู้ใช้อ่าน/แก้แล้วจาก preview — ไม่มี = สร้างจาก defects ตามปกติ */
+    /** มีค่า = feature session — defects ต้องเป็น [] */
+    feature?: FeatureSpec
+    /** ฉบับที่ผู้ใช้อ่าน/แก้แล้วจาก preview — ไม่มี = สร้างจาก defects/feature ตามปกติ */
     prompt?: string
   }): Promise<Session> {
-    const { workspace, defects, branch, dirtyStrategy } = input
+    const { workspace, defects, branch, dirtyStrategy, feature } = input
 
     if (!git.isUsablePath(workspace.path)) {
       throw new HttpError(400, `ไม่พบโฟลเดอร์ ${workspace.path} — repo ถูกย้ายหรือลบไปแล้วหรือเปล่า`)
@@ -170,15 +174,17 @@ export class SessionManager {
       workspaceId: workspace.id,
       branch: workingBranch,
       baseCommit,
+      kind: feature ? 'feature' : 'defect',
       defectIds: defects.map(d => d.id),
       defects,
+      feature,
       state: 'working',
       createdAt: now,
       lastActivityAt: now,
       branchOwnership: ownership,
     }
 
-    this.spawn(session, input.prompt ?? buildPrompt(defects))
+    this.spawn(session, input.prompt ?? taskPrompt(session))
 
     this.records.push(session)
     this.persist()
@@ -253,7 +259,7 @@ export class SessionManager {
     session.state = 'working'
     session.closedAt = undefined
     session.lastActivityAt = new Date().toISOString()
-    this.spawn(session, buildPrompt(session.defects))
+    this.spawn(session, taskPrompt(session))
     this.persist()
     return session
   }
@@ -262,6 +268,9 @@ export class SessionManager {
   async append(id: string, defects: Defect[]): Promise<Session> {
     const session = this.record(id)
     if (!session) throw new HttpError(404, 'ไม่พบ session')
+    if (session.kind === 'feature') {
+      throw new HttpError(409, 'session นี้กำลังทำ feature อยู่ — เปิด session ใหม่สำหรับ defect แทน')
+    }
     const live = this.live.get(id)
     if (!live || live.exited) throw new HttpError(409, 'session นี้ปิดไปแล้ว')
 
@@ -283,7 +292,7 @@ export class SessionManager {
     const session = this.record(id)
     if (!session) throw new HttpError(404, 'ไม่พบ session')
     const files = await this.diff(id).then(d => d.files.map(f => f.path)).catch(() => [])
-    return buildQaPrompt(session.defects, files)
+    return session.feature ? buildFeatureQaPrompt(session.feature, files) : buildQaPrompt(session.defects, files)
   }
 
   /** ส่ง prompt QA (ที่ผู้ใช้ตรวจแล้ว) เข้า pty เดิม — ผู้ใช้เป็นคนเลือกจังหวะเอง */
@@ -578,6 +587,11 @@ export class HttpError extends Error {
   constructor(readonly status: number, message: string) {
     super(message)
   }
+}
+
+/** prompt ตั้งต้นของ session — feature ใช้ requirement ที่พิมพ์เอง defect ใช้รายการจาก tracker */
+function taskPrompt(session: Session): string {
+  return session.feature ? buildFeaturePrompt(session.feature) : buildPrompt(session.defects)
 }
 
 /** ชื่อที่เอาไปติดใน stash message — บอกได้ว่า stash นี้มาจากงานไหน */
