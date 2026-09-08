@@ -80,3 +80,18 @@ test('parseRequirements: บรรทัดละข้อ ตัด bullet/เ�
     { key: 'REQ-3', text: 'ดาวน์โหลดได้ทั้ง 2 ภาษา' },
   ])
 })
+
+import { requirementHint, splitItems } from './format'
+
+test('requirementHint: เตือนคำที่วัดไม่ได้ก่อน แล้วค่อยเตือน 2 พฤติกรรม ปกติคืน null', () => {
+  assert.match(requirementHint('โหลดหน้าให้เร็วขึ้น') ?? '', /วัดไม่ได้/)
+  assert.match(requirementHint('Export must be fast') ?? '', /วัดไม่ได้/)
+  assert.match(requirementHint('กด Export ได้ไฟล์ และ ส่งอีเมลแจ้ง') ?? '', /2 ข้อ/)
+  assert.equal(requirementHint('กดปุ่ม Export แล้วได้ไฟล์ CSV ภายใน 3 วินาที'), null)
+  // "และ" ต้องอยู่กลางประโยค คำที่ลงท้ายด้วย และ/หรือ เฉยๆ ไม่นับ
+  assert.equal(requirementHint('ไฟล์มีหัวคอลัมน์'), null)
+})
+
+test('splitItems: ใช้กติกาเดียวกับ parseRequirements แต่ไม่ตั้งรหัส', () => {
+  assert.deepEqual(splitItems('- ห้ามเปลี่ยนรูปแบบไฟล์เดิม\n\n2) ไม่แตะหน้า admin'), ['ห้ามเปลี่ยนรูปแบบไฟล์เดิม', 'ไม่แตะหน้า admin'])
+})

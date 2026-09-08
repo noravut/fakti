@@ -68,6 +68,13 @@ test('buildFeatureQaPrompt ให้ QA ใช้ spec ของ DEV เป็�
   assert.match(out, /ต้องทวนกับคำเดิมของ REQ ข้างบนทุกข้อ/)
 })
 
+test('buildFeaturePrompt ใส่หัวข้อ ไม่ทำ ที่ผู้สั่งงานระบุ และ QA เห็นเป็นบรรทัด ไม่ทำ: ในหัว', () => {
+  const f = { ...feature, nonGoals: ['ห้ามเปลี่ยนรูปแบบไฟล์เดิม'] }
+  assert.match(buildFeaturePrompt(f), /## ไม่ทำ \/ ห้ามเปลี่ยน \(ผู้สั่งงานระบุมา\)\n\n- ห้ามเปลี่ยนรูปแบบไฟล์เดิม/)
+  assert.match(buildFeatureQaPrompt(f, []), /REQ-2: หัวคอลัมน์เป็นไทย\n\s+ไม่ทำ: ห้ามเปลี่ยนรูปแบบไฟล์เดิม/)
+  assert.doesNotMatch(buildFeaturePrompt(feature), /ผู้สั่งงานระบุมา/)
+})
+
 test('buildFeaturePrompt ไม่มี context ก็ไม่ทิ้งบรรทัดว่างแปลกๆ', () => {
   const out = buildFeaturePrompt({ ...feature, context: undefined })
   assert.match(out, /^# Export CSV\n\n## สิ่งที่ต้องเป็นเมื่อทำเสร็จ/)

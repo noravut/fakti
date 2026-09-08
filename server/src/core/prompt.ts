@@ -41,13 +41,16 @@ function requirementLines(feature: FeatureSpec, indent = ''): string {
  */
 export function buildFeaturePrompt(feature: FeatureSpec): string {
   const context = feature.context?.trim()
+  const nonGoals = feature.nonGoals?.length
+    ? `\n## ไม่ทำ / ห้ามเปลี่ยน (ผู้สั่งงานระบุมา)\n\n${feature.nonGoals.map(n => `- ${n}`).join('\n')}\n`
+    : ''
 
   return `# ${feature.title}
 ${context ? `\n${context}\n` : ''}
 ## สิ่งที่ต้องเป็นเมื่อทำเสร็จ
 
 ${requirementLines(feature, '- ')}
-
+${nonGoals}
 ---
 
 ช่วยทำให้ระบบเป็นตามรายการข้างบนให้หน่อย จะเป็นการเพิ่มความสามารถ แก้พฤติกรรม ปรับของเดิม
@@ -76,6 +79,8 @@ const FEATURE_SPEC_STAGE = `# ขั้น 1 - ทำความเข้าใ
                      เขียนจากสิ่งที่เห็นในโค้ดและรายการ REQ ถ้าเดาไม่ได้ให้ตั้งเป็นคำถาม
 
   ไม่ทำ              สิ่งที่คนอาจคิดว่าอยู่ในงานนี้แต่ไม่ได้ขอ และพฤติกรรมเดิมที่ต้องคงไว้เหมือนเดิม
+
+                     ถ้าผู้สั่งงานเขียนหัวข้อ "ไม่ทำ / ห้ามเปลี่ยน" มาแล้ว ให้ยกมาทั้งหมดแล้วเติมต่อ
 
                      อย่างน้อย 2 ข้อ หัวข้อนี้คือรั้วกันทำเกิน
 
@@ -236,7 +241,11 @@ ${QA_REPORT_DEFECT}`
  */
 export function buildFeatureQaPrompt(feature: FeatureSpec, changedFiles: string[]): string {
   const pad = '                  '
-  const work = `${feature.title}\n${pad}${requirementLines(feature).split('\n').join(`\n${pad}`)}`
+  const lines = [
+    ...requirementLines(feature).split('\n'),
+    ...(feature.nonGoals ?? []).map(n => `ไม่ทำ: ${n}`),
+  ]
+  const work = `${feature.title}\n${pad}${lines.join(`\n${pad}`)}`
 
   return `${qaHeader('ทวน requirement - ตรวจว่างานครบตามที่ขอก่อนส่งมอบ', work, changedFiles)}
 

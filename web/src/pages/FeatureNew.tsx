@@ -3,7 +3,7 @@ import { Link, useLocation } from 'wouter'
 import type { FeatureSpec } from '@shared/types'
 import { api } from '../api'
 import { useStore } from '../store'
-import { parseRequirements } from '../format'
+import { parseRequirements, requirementHint, splitItems } from '../format'
 import { Header } from '../components/Header'
 import { BackLink, useEscapeBack } from '../components/BackLink'
 import { ConfirmDialog, type ConfirmPayload } from '../components/ConfirmDialog'
@@ -26,13 +26,18 @@ export function FeatureNew() {
   const [title, setTitle] = useState('')
   const [reqText, setReqText] = useState('')
   const [context, setContext] = useState('')
+  const [nonGoalText, setNonGoalText] = useState('')
   const [confirming, setConfirming] = useState(false)
 
-  const feature = useMemo<FeatureSpec>(() => ({
-    title: title.trim(),
-    context: context.trim() || undefined,
-    requirements: parseRequirements(reqText),
-  }), [title, context, reqText])
+  const feature = useMemo<FeatureSpec>(() => {
+    const nonGoals = splitItems(nonGoalText)
+    return {
+      title: title.trim(),
+      context: context.trim() || undefined,
+      requirements: parseRequirements(reqText),
+      nonGoals: nonGoals.length > 0 ? nonGoals : undefined,
+    }
+  }, [title, context, reqText, nonGoalText])
   const ready = feature.title !== '' && feature.requirements.length > 0
 
   async function start(payload: ConfirmPayload) {
@@ -102,24 +107,49 @@ export function FeatureNew() {
               />
               {feature.requirements.length > 0 && (
                 <div className="flex flex-col gap-1 pt-1">
-                  {feature.requirements.map(r => (
-                    <div key={r.key} className="flex min-w-0 items-baseline gap-2.5 text-[13px]">
-                      <span className="w-14 shrink-0 font-mono text-faint">{r.key}</span>
-                      <span className="truncate" title={r.text}>{r.text}</span>
-                    </div>
-                  ))}
+                  {feature.requirements.map(r => {
+                    const hint = requirementHint(r.text)
+                    return (
+                      <div key={r.key} className="flex min-w-0 items-baseline gap-2.5 text-[13px]">
+                        <span className="w-14 shrink-0 font-mono text-faint">{r.key}</span>
+                        <span className="truncate" title={r.text}>{r.text}</span>
+                        {hint && (
+                          <span className="inline-flex shrink-0 items-center gap-1.5 text-warn-deep">
+                            <span className="h-1.5 w-1.5 rounded-full bg-warn" />
+                            {hint}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </label>
 
             <label className="flex flex-col gap-1.5">
               <span className="text-[13px] text-muted">
-                ข้อมูลประกอบ<span className="text-faint"> · ไม่บังคับ · หน้าไหน ไฟล์ไหน ลิงก์ design</span>
+                ไม่ทำ / ห้ามเปลี่ยน
+                <span className="text-faint"> · ไม่บังคับ · บรรทัดละข้อ · สิ่งที่รู้อยู่แล้วว่าห้ามแตะ claude จะเติมต่อเอง</span>
+              </span>
+              <textarea
+                value={nonGoalText}
+                rows={2}
+                spellCheck={false}
+                placeholder={'ห้ามเปลี่ยนรูปแบบไฟล์ export เดิม\nไม่แตะหน้า admin'}
+                onChange={e => setNonGoalText(e.target.value)}
+                className={TEXTAREA}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[13px] text-muted">
+                ข้อมูลประกอบ<span className="text-faint"> · ไม่บังคับ · ใครใช้ · วันนี้ติดอะไร · หน้าไหน ไฟล์ไหน</span>
               </span>
               <textarea
                 value={context}
                 rows={3}
                 spellCheck={false}
+                placeholder={'ทีมบัญชีใช้ทุกสิ้นเดือน ตอนนี้ต้อง copy จากตารางไปวาง Excel เอง\nหน้า /reports · web/src/pages/Reports.tsx'}
                 onChange={e => setContext(e.target.value)}
                 className={TEXTAREA}
               />

@@ -101,11 +101,33 @@ export function suggestFeatureBranch(title: string): string {
  * ตัด bullet หรือเลขข้อที่คนมักพิมพ์ติดมา (- * • 1. 2)) จะได้ไม่ซ้อนกับรหัสที่ตั้งให้
  */
 export function parseRequirements(text: string): Requirement[] {
+  return splitItems(text).map((t, i) => ({ key: `REQ-${i + 1}`, text: t }))
+}
+
+/** ข้อความบรรทัดละข้อ → รายการ ตัด bullet/เลขข้อ ข้ามบรรทัดว่าง */
+export function splitItems(text: string): string[] {
   return text
     .split('\n')
     .map(line => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
     .filter(Boolean)
-    .map((t, i) => ({ key: `REQ-${i + 1}`, text: t }))
+}
+
+/**
+ * คำที่ทำให้ requirement ตรวจไม่ได้ ตามแนว ISO 29148 (subjective, comparative, open-ended)
+ * ตรงกับ prompt เริ่มงานที่ห้าม agent ใช้คำพวกนี้ใน REQ ที่เขียนใหม่
+ */
+const VAGUE_WORDS = /เร็ว|ง่าย|เหมาะสม|ถูกต้อง|ดีขึ้น|ครบถ้วน|สะดวก|สวย|เสถียร|\b(fast|easy|proper(ly)?|correct(ly)?|better|nice|robust)\b/i
+/** และ/หรือ กลางประโยคมักแปลว่ามี 2 พฤติกรรมในข้อเดียว */
+const TWO_BEHAVIOURS = /\S\s+(และ|หรือ|and|or)\s+\S/i
+
+/**
+ * คำใบ้ระหว่างพิมพ์ requirement — เตือน ไม่บล็อก
+ * คืน null เมื่อไม่มีอะไรน่าติง
+ */
+export function requirementHint(text: string): string | null {
+  if (VAGUE_WORDS.test(text)) return 'มีคำที่วัดไม่ได้ ลองใส่ค่าหรือตัวอย่างที่เห็นได้'
+  if (TWO_BEHAVIOURS.test(text)) return 'อาจเป็น 2 ข้อ ถ้าใช่ให้แยกบรรทัด'
+  return null
 }
 
 /** แปลงข้อความคั่นจุลภาคเป็นรายชื่อ branch — ใช้ทั้งค่าตั้งต้นและค่าเฉพาะ repo */

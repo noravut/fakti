@@ -179,9 +179,11 @@ export interface Requirement {
 
 export interface FeatureSpec {
   title: string
-  /** ข้อมูลประกอบ เช่น หน้าไหน ไฟล์ไหน ลิงก์ design — ว่างได้ */
+  /** ข้อมูลประกอบ เช่น ใครใช้ ติดอะไร หน้าไหน ไฟล์ไหน — ว่างได้ */
   context?: string
   requirements: Requirement[]
+  /** สิ่งที่ห้ามทำหรือห้ามเปลี่ยน ที่ผู้สั่งงานรู้อยู่แล้ว — agent เติมต่อได้ */
+  nonGoals?: string[]
 }
 
 export interface Session {

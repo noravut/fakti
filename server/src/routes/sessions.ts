@@ -18,6 +18,7 @@ const featureSpec = z.object({
   title: z.string().trim().min(1),
   context: z.string().optional(),
   requirements: z.array(z.object({ key: z.string().min(1), text: z.string().trim().min(1) })).min(1),
+  nonGoals: z.array(z.string().trim().min(1)).optional(),
 })
 
 /** ต้องมีอย่างใดอย่างหนึ่ง: defect จาก tracker หรือ feature ที่พิมพ์เอง */
