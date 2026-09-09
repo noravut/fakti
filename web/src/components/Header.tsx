@@ -32,7 +32,7 @@ export function Header({ crumbs = [], showWorkspace = true }: Props) {
     <div className="flex h-[52px] items-center justify-between gap-4 border-b border-hair px-5">
       <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-2">
         <Link href="/" className="shrink-0 text-[15px] font-semibold">
-          Defect fixer
+          fakti
         </Link>
         {crumbs.map((crumb, i) => {
           const last = i === crumbs.length - 1

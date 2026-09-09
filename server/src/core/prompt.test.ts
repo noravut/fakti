@@ -83,6 +83,15 @@ test('buildFeaturePrompt จำกัดคำถามที่บล็อก�
   assert.match(out, /เขียนสรุปทั้งขั้นนี้ลงไฟล์ `\.pat-spec\.md`/)
 })
 
+test('buildFeaturePrompt: ตารางขั้น 3 มี 3 สถานะ และห้ามให้ ครบ กับแถวที่หลักฐานเป็นการอ่านโค้ด', () => {
+  const out = buildFeaturePrompt(feature)
+  assert.match(out, /ช่องสถานะ เลือกได้ 3 ค่าเท่านั้น/)
+  for (const v of ['ครบ', 'ยังไม่ยืนยัน', 'ไม่ครบ']) assert.ok(out.includes(v), v)
+  assert.match(out, /"อ่านโค้ดแล้วมั่นใจว่าถูก" ไม่ใช่หลักฐาน/)
+  assert.match(out, /ห้ามใส่ "ครบ" ให้แถวที่หลักฐานมาจากการอ่านโค้ดอย่างเดียว/)
+  assert.match(out, /ต้องมีอะไรถึงจะยืนยันได้/)
+})
+
 test('buildFeatureQaPrompt ให้ถอยมามองทั้งงาน และรายงานหัวข้อ ยังขาดอะไร', () => {
   const out = buildFeatureQaPrompt(feature, [])
   assert.match(out, /ต่อให้ทุก REQ ครบหมดแล้ว ยังมีอะไรที่ทำให้ใช้งานจริงไม่ได้ไหม/)

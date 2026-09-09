@@ -86,9 +86,9 @@ export function Session({ id }: { id: string }) {
 
   // สถานะ "รอคุณตอบ" ต้องเห็นได้จาก tab อื่น
   useEffect(() => {
-    document.title = state === 'waiting' ? '● รอคุณตอบ — Defect fixer' : 'Defect fixer'
+    document.title = state === 'waiting' ? '● รอคุณตอบ — fakti' : 'fakti'
     return () => {
-      document.title = 'Defect fixer'
+      document.title = 'fakti'
     }
   }, [state])
 
