@@ -5,6 +5,13 @@ import type { Defect, FeatureSpec } from '@shared/types'
 export const TASK_FILE = '.pat-task.md'
 export const QA_FILE = '.pat-qa.md'
 
+/**
+ * ไฟล์ที่ agent เขียนรายงานลงไปเอง ไม่ใช่ fakti เขียน
+ * ต้องกันออกจาก git ตั้งแต่เปิด session ไม่งั้นไปโผล่ใน git status และ diff ของผู้ใช้
+ */
+export const SPEC_FILE = '.pat-spec.md'
+export const QA_REPORT_FILE = '.pat-qa-report.md'
+
 export function buildPrompt(defects: Defect[]): string {
   const blocks = defects.map(d => `
 ## ${d.key}: ${d.title}
@@ -146,9 +153,23 @@ const FEATURE_SPEC_STAGE = `# ขั้น 1 - ทำความเข้าใ
 
   มีคำถามที่ติด · มีช่องโหว่แบบ "ขัดกันเอง" · มีช่องโหว่แบบ "ขาดกฎ"
 
+**รวมแล้วห้ามถามเกิน 3 ข้อต่อรอบ** เกินนั้นคนตอบไม่ไหวและจะตอบผ่าน ๆ ซึ่งแย่กว่าไม่ถาม
+
+เกิน 3 ให้เรียงตามผลกระทบแล้วยกมาถามเฉพาะ 3 ข้อที่บล็อกหนักที่สุด
+
+ที่เหลือให้ตั้งข้อสมมติที่ปลอดภัยที่สุดแล้วเดินต่อ ติดป้าย "ยังไม่ยืนยัน" ไว้ทุกข้อ
+
+แล้วยกกลับมาถามในรอบถัดไปหลังได้คำตอบ 3 ข้อแรก
+
 ช่องโหว่แบบ "ขาดคู่" กับ "ชนของเดิม" ไม่ต้องรอ ให้เสนอไว้แล้วทำต่อภายใต้ข้อสมมติที่เขียนชัด
 
-ไม่มีอะไรค้างเลย ให้ไปขั้น 2 ได้เลย ไม่ต้องขออนุมัติ`
+ไม่มีอะไรค้างเลย ให้ไปขั้น 2 ได้เลย ไม่ต้องขออนุมัติ
+
+เขียนสรุปทั้งขั้นนี้ลงไฟล์ \`${SPEC_FILE}\` ด้วย ไม่ใช่พิมพ์ในบทสนทนาอย่างเดียว
+
+ข้อความยาว ๆ ที่พิมพ์ออกจอ คนก็อปไปอ่านต่อแล้วตกหล่น ไฟล์เปิดใน editor ได้ครบ
+
+ไฟล์นี้ถูกกันออกจาก git ให้แล้ว ไม่ติดไปกับ commit · แก้ spec ระหว่างทางให้อัปเดตไฟล์นี้ด้วย`
 
 const FEATURE_BUILD_STAGE = `# ขั้น 2 - ลงมือ
 
@@ -189,6 +210,12 @@ export function writeTaskFile(repoPath: string, content: string, file = TASK_FIL
   fs.writeFileSync(path.join(repoPath, file), `${content}\n`, 'utf8')
   addToGitExclude(repoPath, file)
   return `อ่าน ${file} แล้วทำตามนั้น`
+}
+
+/** เรียกตอนเปิด session — กันไฟล์รายงานที่ agent จะเขียนเองออกจาก git ไว้ล่วงหน้า */
+export function excludeReportFiles(repoPath: string): void {
+  addToGitExclude(repoPath, SPEC_FILE)
+  addToGitExclude(repoPath, QA_REPORT_FILE)
 }
 
 function addToGitExclude(repoPath: string, file: string): void {
@@ -595,4 +622,8 @@ const QA_REPORT_FEATURE = `# รายงานสรุปตอนจบ
 
                     เขียนเป็น REQ ที่เสนอเพิ่ม ตอบรับหรือไม่รับได้ทันที
 
-หัวข้อ 4, 5, 6 ห้ามเว้นว่างโดยไม่เขียนอะไร ถ้าไม่มีให้เขียนว่า "ไม่มี"`
+หัวข้อ 4, 5, 6 ห้ามเว้นว่างโดยไม่เขียนอะไร ถ้าไม่มีให้เขียนว่า "ไม่มี"
+
+เขียนรายงานนี้ลงไฟล์ \`${QA_REPORT_FILE}\` ด้วย ไม่ใช่พิมพ์ออกจออย่างเดียว
+
+ไฟล์นี้ถูกกันออกจาก git ให้แล้ว ไม่ติดไปกับ commit`

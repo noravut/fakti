@@ -75,14 +75,25 @@ test('buildFeaturePrompt สั่งหาช่องโหว่ของ REQ
   assert.ok(out.indexOf('ช่องโหว่ของ REQ') < out.indexOf('คำถามที่ติด'))
 })
 
+test('buildFeaturePrompt จำกัดคำถามที่บล็อกไม่เกิน 3 ข้อ และสั่งเขียน spec ลงไฟล์', () => {
+  const out = buildFeaturePrompt(feature)
+  assert.match(out, /ห้ามถามเกิน 3 ข้อต่อรอบ/)
+  assert.match(out, /ยกมาถามเฉพาะ 3 ข้อที่บล็อกหนักที่สุด/)
+  assert.match(out, /ยังไม่ยืนยัน/)
+  assert.match(out, /เขียนสรุปทั้งขั้นนี้ลงไฟล์ `\.pat-spec\.md`/)
+})
+
 test('buildFeatureQaPrompt ให้ถอยมามองทั้งงาน และรายงานหัวข้อ ยังขาดอะไร', () => {
   const out = buildFeatureQaPrompt(feature, [])
   assert.match(out, /ต่อให้ทุก REQ ครบหมดแล้ว ยังมีอะไรที่ทำให้ใช้งานจริงไม่ได้ไหม/)
   assert.match(out, /6\. ยังขาดอะไร/)
   assert.match(out, /ต้องมีครบ 6 หัวข้อ/)
   assert.match(out, /หัวข้อ 4, 5, 6 ห้ามเว้นว่าง/)
-  // ของ defect ต้องไม่ถูกลาก 6 หัวข้อไปด้วย
-  assert.match(buildQaPrompt([], []), /ต้องมีครบ 5 หัวข้อ/)
+  assert.match(out, /เขียนรายงานนี้ลงไฟล์ `\.pat-qa-report\.md`/)
+  // ของ defect ต้องไม่ถูกลาก 6 หัวข้อกับไฟล์รายงานไปด้วย
+  const defectQa = buildQaPrompt([], [])
+  assert.match(defectQa, /ต้องมีครบ 5 หัวข้อ/)
+  assert.doesNotMatch(defectQa, /pat-qa-report/)
 })
 
 test('buildFeatureQaPrompt ให้ QA ใช้ spec ของ DEV เป็นฐานแต่ทวนกับคำเดิมของ REQ', () => {

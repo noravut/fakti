@@ -7,7 +7,8 @@ import type {
 import { isProtectedBranch, protectedBranchesFor, readSessions, writeSessions } from './config'
 import * as git from './git'
 import {
-  QA_FILE, buildFeaturePrompt, buildFeatureQaPrompt, buildPrompt, buildQaPrompt, writeTaskFile,
+  QA_FILE, buildFeaturePrompt, buildFeatureQaPrompt, buildPrompt, buildQaPrompt, excludeReportFiles,
+  writeTaskFile,
 } from './prompt'
 
 /** output ที่เก็บไว้ให้ client ที่ต่อใหม่ ~200KB ต่อ session */
@@ -361,6 +362,7 @@ export class SessionManager {
     })
 
     // prompt ไปทางไฟล์ ส่งเข้า pty แค่บรรทัดเดียว — ดูเหตุผลใน core/prompt.ts
+    excludeReportFiles(workspace.path)
     const line = writeTaskFile(workspace.path, prompt)
     term.write(`${line}\r`)
   }
