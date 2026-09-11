@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { Link, useLocation } from 'wouter'
 
 /**
@@ -9,9 +10,9 @@ export function BackLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="inline-flex w-fit items-center gap-1.5 text-[13px] text-muted transition-colors hover:text-ink"
+      className="inline-flex w-fit items-center gap-1.5 text-sm text-muted transition-colors hover:text-ink"
     >
-      <span aria-hidden>←</span>
+      <ArrowLeft aria-hidden size={16} />
       {label}
     </Link>
   )

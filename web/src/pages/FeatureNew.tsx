@@ -4,13 +4,12 @@ import type { FeatureSpec } from '@shared/types'
 import { api } from '../api'
 import { useStore } from '../store'
 import { parseRequirements, requirementHint, splitItems } from '../format'
-import { Header } from '../components/Header'
 import { BackLink, useEscapeBack } from '../components/BackLink'
 import { ConfirmDialog, type ConfirmPayload } from '../components/ConfirmDialog'
 import { Button, Card, EmptyState, Input, SectionTitle } from '../components/ui'
 
 const TEXTAREA =
-  'w-full resize-y rounded border border-line bg-paper px-3 py-2 text-[13px] leading-[1.6] text-ink ' +
+  'w-full resize-y rounded border border-line bg-paper px-3 py-2 text-sm leading-relaxed text-ink ' +
   'placeholder:text-faint'
 
 /**
@@ -61,41 +60,40 @@ export function FeatureNew() {
       <BackLink href="/" label="กลับไป Defect list" />
 
       <Card>
-        <Header crumbs={[{ label: 'สร้าง feature' }]} />
-
         {!workspace ? (
           <div className="px-5 py-6">
             <EmptyState
               title="ยังไม่มี repo ให้ทำงาน"
-              hint="เพิ่ม repo ในหน้าตั้งค่าก่อน แล้วกลับมาสร้าง feature"
+              hint="เพิ่ม repo ในหน้าตั้งค่าก่อน แล้วกลับมาสั่งงาน"
               action={<Link href="/settings"><Button size="sm">ไปหน้าตั้งค่า</Button></Link>}
             />
           </div>
         ) : (
-          <div className="flex flex-col gap-5 px-5 pb-5 pt-[18px]">
+          <div className="flex flex-col gap-5 px-5 pb-5 pt-4">
             <div className="flex flex-col gap-1">
-              <SectionTitle>สร้าง feature</SectionTitle>
-              <span className="text-[13px] text-muted">
-                พิมพ์สิ่งที่ feature นี้ควรทำได้ บรรทัดละข้อ ผู้ช่วยเขียนโค้ด จะทำตามนั้น
+              <SectionTitle>สั่งงานเอง</SectionTitle>
+              <span className="text-sm text-muted">
+                งานที่ไม่ได้มาจาก tracker — เพิ่มความสามารถ แก้ของเดิม ถอดของที่ไม่ใช้ หรืองาน maintenance
+                พิมพ์สิ่งที่ต้องได้หลังทำเสร็จ บรรทัดละข้อ ผู้ช่วยเขียนโค้ด จะทำตามนั้น
                 ทำเสร็จกด "ทวน requirement" ในหน้า session เพื่อให้มันตรวจว่าครบทุกข้อ
               </span>
             </div>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-[13px] text-muted">ชื่อ feature</span>
+              <span className="text-sm text-muted">ชื่องาน</span>
               <Input
                 autoFocus
                 value={title}
                 spellCheck={false}
-                placeholder="เช่น Export รายงานเป็น CSV"
+                placeholder="เช่น Export รายงานเป็น CSV · ถอดเมนูตั้งค่าเก่าออก"
                 onChange={e => setTitle(e.target.value)}
                 className="w-full"
               />
             </label>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-[13px] text-muted">
-                สิ่งที่ควรทำได้
+              <span className="text-sm text-muted">
+                สิ่งที่ต้องได้หลังทำเสร็จ
                 <span className="text-faint"> · บรรทัดละข้อ · fakti ตั้งรหัส REQ-n ให้ ผู้ช่วยเขียนโค้ด อ้างใน commit</span>
               </span>
               <textarea
@@ -111,11 +109,11 @@ export function FeatureNew() {
                   {feature.requirements.map(r => {
                     const hint = requirementHint(r.text)
                     return (
-                      <div key={r.key} className="flex min-w-0 items-baseline gap-2.5 text-[13px]">
+                      <div key={r.key} className="flex min-w-0 items-baseline gap-2.5 text-sm">
                         <span className="w-14 shrink-0 font-mono text-faint">{r.key}</span>
                         <span className="truncate" title={r.text}>{r.text}</span>
                         {hint && (
-                          <span className="inline-flex shrink-0 items-center gap-1.5 text-warn-deep">
+                          <span className="inline-flex shrink-0 items-center gap-1.5 text-warn">
                             <span className="h-1.5 w-1.5 rounded-full bg-warn" />
                             {hint}
                           </span>
@@ -128,7 +126,7 @@ export function FeatureNew() {
             </label>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-[13px] text-muted">
+              <span className="text-sm text-muted">
                 ไม่ทำ / ห้ามเปลี่ยน
                 <span className="text-faint"> · ไม่บังคับ · บรรทัดละข้อ · สิ่งที่รู้อยู่แล้วว่าห้ามแตะ ผู้ช่วยเขียนโค้ด จะเติมต่อเอง</span>
               </span>
@@ -143,7 +141,7 @@ export function FeatureNew() {
             </label>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-[13px] text-muted">
+              <span className="text-sm text-muted">
                 ข้อมูลประกอบ<span className="text-faint"> · ไม่บังคับ · ใครใช้ · วันนี้ติดอะไร · หน้าไหน ไฟล์ไหน</span>
               </span>
               <textarea
@@ -157,7 +155,7 @@ export function FeatureNew() {
             </label>
 
             <div className="flex items-center justify-end gap-3 border-t border-hair pt-4">
-              {!ready && <span className="text-[13px] text-faint">ต้องมีชื่อและอย่างน้อย 1 ข้อ</span>}
+              {!ready && <span className="text-sm text-faint">ต้องมีชื่อและอย่างน้อย 1 ข้อ</span>}
               <Button variant="primary" disabled={!ready} onClick={() => setConfirming(true)}>
                 ถัดไป
               </Button>

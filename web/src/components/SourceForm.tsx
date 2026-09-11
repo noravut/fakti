@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Check, X } from 'lucide-react'
 import type { CheckResult, CheckStage, SourceConfig } from '@shared/types'
 import { api } from '../api'
 import { Button, Input } from './ui'
@@ -54,7 +55,7 @@ export function SourceForm({ sources, sourceId, vars, defaultLabel, workspaceId,
   return (
     <div className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
-        <span className="text-[13px] text-muted">ดึง defect จาก</span>
+        <span className="text-sm text-muted">ดึง defect จาก</span>
         <select
           value={sourceId ?? ''}
           onChange={e => {
@@ -62,7 +63,7 @@ export function SourceForm({ sources, sourceId, vars, defaultLabel, workspaceId,
             onChange({ sourceId: e.target.value || undefined, vars: {} })
             setResults(null)
           }}
-          className="rounded border border-line bg-paper px-2.5 py-1.5 text-[13px]"
+          className="rounded border border-line bg-paper px-2.5 py-1.5 text-sm"
         >
           {defaultLabel && <option value="">{defaultLabel}</option>}
           {sources.map(s => (
@@ -77,7 +78,7 @@ export function SourceForm({ sources, sourceId, vars, defaultLabel, workspaceId,
         <div className="flex flex-col gap-3">
           {source.vars.map(v => (
             <label key={v.key} className="flex flex-col gap-1.5">
-              <span className="text-[13px] text-muted">
+              <span className="text-sm text-muted">
                 {v.label}
                 {v.required && <span className="text-danger"> *</span>}
               </span>
@@ -86,14 +87,14 @@ export function SourceForm({ sources, sourceId, vars, defaultLabel, workspaceId,
                 spellCheck={false}
                 onChange={e => onChange({ sourceId, vars: { ...vars, [v.key]: e.target.value } })}
               />
-              {v.hint && <span className="text-[13px] text-faint">{v.hint}</span>}
+              {v.hint && <span className="text-sm text-faint">{v.hint}</span>}
             </label>
           ))}
         </div>
       )}
 
       {source && source.vars.length === 0 && (
-        <span className="text-[13px] text-faint">source นี้ไม่ต้องกรอกอะไรเพิ่ม ดึงมาทั้งหมด</span>
+        <span className="text-sm text-faint">source นี้ไม่ต้องกรอกอะไรเพิ่ม ดึงมาทั้งหมด</span>
       )}
 
       <div className="flex items-center gap-3">
@@ -101,13 +102,13 @@ export function SourceForm({ sources, sourceId, vars, defaultLabel, workspaceId,
           {testing ? 'กำลังทดสอบ…' : 'ทดสอบการเชื่อมต่อ'}
         </Button>
         {missingRequired.length > 0 && (
-          <span className="text-[13px] text-faint">
+          <span className="text-sm text-faint">
             กรอก {missingRequired.map(v => v.label).join(', ')} ก่อน
           </span>
         )}
       </div>
 
-      {error && <span className="text-[13px] text-danger">{error}</span>}
+      {error && <span className="text-sm text-danger">{error}</span>}
       {results && <CheckReport results={results} />}
     </div>
   )
@@ -123,16 +124,18 @@ function CheckReport({ results }: { results: CheckResult[] }) {
     <div className="flex flex-col gap-2 rounded border border-hair bg-surface px-4 py-3.5">
       {results.map(r => (
         <div key={r.stage} className="flex flex-col gap-0.5">
-          <div className="flex gap-2.5 text-[13px]">
-            <span className={r.ok ? 'text-pine' : 'text-danger'}>{r.ok ? '✓' : '✗'}</span>
+          <div className="flex gap-2.5 text-sm">
+            {r.ok
+              ? <Check aria-hidden size={16} className="shrink-0 text-pine" />
+              : <X aria-hidden size={16} className="shrink-0 text-danger" />}
             <span className="w-28 shrink-0 text-muted">{STAGE_LABEL[r.stage]}</span>
             <span className={r.ok ? 'text-ink' : 'text-danger'}>{r.detail}</span>
           </div>
-          {r.fix && <span className="pl-[136px] text-[13px] text-warn-deep">{r.fix}</span>}
+          {r.fix && <span className="pl-34 text-sm text-warn">{r.fix}</span>}
           {r.availableKeys && r.availableKeys.length > 0 && (
-            <div className="flex flex-wrap gap-1 pl-[136px] pt-1">
+            <div className="flex flex-wrap gap-1 pl-34 pt-1">
               {r.availableKeys.map(k => (
-                <span key={k} className="rounded-chip bg-paper px-1.5 py-0.5 font-mono text-[11px] text-muted">
+                <span key={k} className="rounded-chip bg-paper px-1.5 py-0.5 font-mono text-xs text-muted">
                   {k}
                 </span>
               ))}
@@ -143,9 +146,9 @@ function CheckReport({ results }: { results: CheckResult[] }) {
 
       {preview && (
         <div className="mt-1.5 flex flex-col gap-1 border-t border-hair pt-3">
-          <span className="text-[13px] text-muted">ตัวอย่างรายการแรก</span>
+          <span className="text-sm text-muted">ตัวอย่างรายการแรก</span>
           {PREVIEW_FIELDS.map(f => (
-            <div key={f} className="flex gap-2.5 text-[13px]">
+            <div key={f} className="flex gap-2.5 text-sm">
               <span className="w-20 shrink-0 font-mono text-faint">{f}</span>
               <span className="truncate">{preview[f] || '—'}</span>
             </div>
@@ -158,12 +161,12 @@ function CheckReport({ results }: { results: CheckResult[] }) {
           <button
             type="button"
             onClick={() => setShowRaw(v => !v)}
-            className="self-start text-[13px] text-pine hover:text-pine-deep"
+            className="self-start text-sm text-pine hover:text-pine-btn-hover"
           >
             {showRaw ? 'ซ่อน payload ดิบ' : 'ดู payload ดิบ'}
           </button>
           {showRaw && (
-            <pre className="max-h-64 overflow-auto rounded border border-hair bg-paper p-3 font-mono text-[11px] leading-relaxed">
+            <pre className="max-h-64 overflow-auto rounded border border-hair bg-paper p-3 font-mono text-xs leading-relaxed">
               {typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2)}
             </pre>
           )}
@@ -171,7 +174,7 @@ function CheckReport({ results }: { results: CheckResult[] }) {
       )}
 
       {last && !last.ok && (
-        <span className="pt-1 text-[13px] text-faint">
+        <span className="pt-1 text-sm text-faint">
           แก้ที่ ~/.pat/sources.json แล้วกดทดสอบใหม่ได้เลย ไม่ต้องรีสตาร์ท
         </span>
       )}

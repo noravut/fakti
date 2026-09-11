@@ -13,6 +13,25 @@ const EMPTY_FACETS: Facets = { status: [], severity: [], assignee: [] }
 /** id ของ defect ที่ผู้ใช้ทำเครื่องหมายเองว่าแก้แล้ว — เก็บแค่ id ไว้ในเครื่อง ไม่ยุ่งกับ tracker */
 const MARKED_KEY = 'pat.markedFixed'
 
+/** ธีมกับฟอนต์ที่ผู้ใช้เลือก — index.html อ่าน key นี้ก่อน React mount เพื่อกันจอกระพริบ */
+const APPEARANCE_KEY = 'fakti.appearance'
+
+function readAppearance(): { theme: Theme; font: Font } {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(APPEARANCE_KEY) ?? '{}')
+    const o = (raw ?? {}) as Record<string, unknown>
+    return {
+      theme: o.theme === 'light' ? 'light' : 'dark',
+      font: o.font === 'anuphan' ? 'anuphan' : 'plex',
+    }
+  } catch {
+    return { theme: 'dark', font: 'plex' } // localStorage ปิดอยู่ — ใช้ค่าเริ่มต้น dark-first
+  }
+}
+
+export type Theme = 'dark' | 'light'
+export type Font = 'plex' | 'anuphan'
+
 function readMarked(): string[] {
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(MARKED_KEY) ?? '[]')
@@ -56,8 +75,12 @@ interface State {
   gitStatusError: string | null
   /** ข้อความที่เด้งบนหน้าหลักหลังถูก redirect มา เช่น เปิด session ที่ถูกลบไปแล้ว */
   flash: string | null
+  theme: Theme
+  font: Font
 
   setFlash: (message: string | null) => void
+  setTheme: (theme: Theme) => void
+  setFont: (font: Font) => void
   /** ติ๊ก/เอาติ๊กออกว่าแก้ defect นี้แล้ว */
   toggleMarkedFixed: (id: string) => void
   bootstrap: () => Promise<void>
@@ -96,9 +119,20 @@ export const useStore = create<State>((set, get) => ({
   gitStatus: null,
   gitStatusError: null,
   flash: null,
+  ...readAppearance(),
 
   setFlash(message) {
     set({ flash: message })
+  },
+
+  setTheme(theme) {
+    set({ theme })
+    applyAppearance(theme, get().font)
+  },
+
+  setFont(font) {
+    set({ font })
+    applyAppearance(get().theme, font)
   },
 
   toggleMarkedFixed(id) {
@@ -244,4 +278,15 @@ export function startPolling(): () => void {
     })
   }, STATUS_POLL_MS)
   return () => clearInterval(timer)
+}
+
+/** เขียนลง <html> ที่เดียว — CSS variable ทั้งชุดผูกกับ data-theme/data-font สองตัวนี้ */
+function applyAppearance(theme: Theme, font: Font) {
+  document.documentElement.dataset.theme = theme
+  document.documentElement.dataset.font = font
+  try {
+    localStorage.setItem(APPEARANCE_KEY, JSON.stringify({ theme, font }))
+  } catch {
+    // เขียนไม่ได้ — ธีมยังเปลี่ยนได้ในรอบนี้ แค่ไม่ค้างข้ามรอบ
+  }
 }

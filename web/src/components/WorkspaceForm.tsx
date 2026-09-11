@@ -101,7 +101,7 @@ export function WorkspaceForm({ initial, takenColors, onSaved, onCancel }: Props
   return (
     <div className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
-        <span className="text-[13px] text-muted">path ของ repo</span>
+        <span className="text-sm text-muted">path ของ repo</span>
         <Input
           value={path}
           spellCheck={false}
@@ -109,22 +109,22 @@ export function WorkspaceForm({ initial, takenColors, onSaved, onCancel }: Props
           onChange={e => setPath(e.target.value)}
         />
         {checking ? (
-          <span className="text-[13px] text-faint">กำลังตรวจ…</span>
+          <span className="text-sm text-faint">กำลังตรวจ…</span>
         ) : check?.ok ? (
-          <span className="text-[13px] text-pine">
+          <span className="text-sm text-pine">
             ใช้ได้ · {check.remote ?? 'ไม่มี remote'}
             {check.branches?.length ? ` · ${check.branches.length} branch` : ''}
           </span>
         ) : check?.error ? (
-          <span className="text-[13px] text-danger">{check.error}</span>
+          <span className="text-sm text-danger">{check.error}</span>
         ) : (
-          <span className="text-[13px] text-faint">ใส่ absolute path ของ git repo ในเครื่อง</span>
+          <span className="text-sm text-faint">ใส่ absolute path ของ git repo ในเครื่อง</span>
         )}
       </label>
 
       <div className="flex gap-4">
         <label className="flex flex-1 flex-col gap-1.5">
-          <span className="text-[13px] text-muted">ชื่อที่ใช้เรียก</span>
+          <span className="text-sm text-muted">ชื่อที่ใช้เรียก</span>
           <Input
             value={name}
             onChange={e => {
@@ -135,12 +135,12 @@ export function WorkspaceForm({ initial, takenColors, onSaved, onCancel }: Props
         </label>
 
         <label className="flex flex-1 flex-col gap-1.5">
-          <span className="text-[13px] text-muted">base branch</span>
+          <span className="text-sm text-muted">base branch</span>
           {check?.branches?.length ? (
             <select
               value={baseBranch}
               onChange={e => setBaseBranch(e.target.value)}
-              className="rounded border border-line bg-paper px-2.5 py-1.5 font-mono text-[13px]"
+              className="rounded border border-line bg-paper px-2.5 py-1.5 font-mono text-sm"
             >
               {check.branches.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
@@ -151,7 +151,7 @@ export function WorkspaceForm({ initial, takenColors, onSaved, onCancel }: Props
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-[13px] text-muted">สีประจำ repo</span>
+        <span className="text-sm text-muted">สีประจำ repo</span>
         <div className="flex gap-2">
           {WORKSPACE_COLORS.map(c => (
             <button
@@ -171,14 +171,14 @@ export function WorkspaceForm({ initial, takenColors, onSaved, onCancel }: Props
       </div>
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-[13px] text-muted">branch ที่ห้ามแก้ทับเฉพาะ repo นี้</span>
+        <span className="text-sm text-muted">branch ที่ห้ามแก้ทับเฉพาะ repo นี้</span>
         <Input
           value={protectedDraft}
           spellCheck={false}
           placeholder={`ไม่ระบุ = ใช้ค่าตั้งต้น (${protectedBranches.join(', ') || 'ไม่มี'})`}
           onChange={e => setProtectedDraft(e.target.value)}
         />
-        <span className="text-[13px] text-faint">
+        <span className="text-sm text-faint">
           คั่นด้วยจุลภาค — คนละเรื่องกับ base branch ด้านบน
         </span>
       </label>
@@ -197,7 +197,7 @@ export function WorkspaceForm({ initial, takenColors, onSaved, onCancel }: Props
         />
       </div>
 
-      {error && <span className="text-[13px] text-danger">{error}</span>}
+      {error && <span className="text-sm text-danger">{error}</span>}
 
       <div className="flex justify-end gap-2.5">
         {onCancel && <Button onClick={onCancel} disabled={saving}>ยกเลิก</Button>}

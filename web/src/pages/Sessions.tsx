@@ -4,16 +4,16 @@ import type { SessionState } from '@shared/types'
 import { AGENT_LABELS } from '@shared/types'
 import { useStore } from '../store'
 import { relativeTime } from '../format'
-import { Header } from '../components/Header'
 import { BackLink, useEscapeBack } from '../components/BackLink'
 import { ColorDot } from '../components/WorkspaceChip'
-import { Button, Card, SectionTitle } from '../components/ui'
+import { Button, Card, EmptyState, SectionTitle, StatusBadge } from '../components/ui'
 
-const STATE_LABEL: Record<SessionState, { label: string; color: string }> = {
-  working: { label: 'กำลังทำงาน', color: '#A66A0F' },
-  waiting: { label: 'รอคุณตอบ', color: '#7A4E0B' },
-  idle: { label: 'พร้อมรับคำสั่ง', color: '#5C6068' },
-  closed: { label: 'ปิดแล้ว', color: '#8E939C' },
+/** สีมาจาก token ใน StatusBadge — ที่นี่เก็บแค่คำ */
+const STATE_LABEL: Record<SessionState, string> = {
+  working: 'กำลังทำงาน',
+  waiting: 'รอคุณตอบ',
+  idle: 'พร้อมรับคำสั่ง',
+  closed: 'ปิดแล้ว',
 }
 
 export function Sessions() {
@@ -30,19 +30,19 @@ export function Sessions() {
       <BackLink href="/" label="กลับไป Defect list" />
 
       <Card>
-        <Header crumbs={[{ label: 'Session ที่เปิดอยู่' }]} />
-
-        <div className="px-5 pb-3 pt-[18px]">
+        <div className="px-5 pb-3 pt-4">
           <SectionTitle>Session ย้อนหลัง</SectionTitle>
         </div>
 
         <div className="mx-5 mb-4 overflow-hidden rounded-card border border-hair bg-paper">
           {sessions.length === 0 ? (
-            <div className="px-4 py-4 text-sm text-faint">ยังไม่เคยเปิด session</div>
+            <EmptyState
+              title="ยังไม่เคยเปิด session"
+              hint="เลือก defect จากหน้าแรก หรือสั่งงานเองแล้วให้ agent ลงมือ"
+            />
           ) : (
             sessions.map(s => {
               const workspace = workspaces.find(w => w.id === s.workspaceId)
-              const state = STATE_LABEL[s.state]
               return (
                 <div key={s.id} className="flex items-center gap-3 border-t border-hair px-4 py-3 first:border-t-0">
                   {workspace ? (
@@ -50,15 +50,15 @@ export function Sessions() {
                   ) : (
                     <span className="h-2 w-2 shrink-0 rounded-full bg-line" />
                   )}
-                  <span className="font-mono text-[13px] font-medium">{s.branch}</span>
-                  <span className="text-[13px] text-faint">{AGENT_LABELS[s.agent]}</span>
-                  <span className="flex-1 truncate text-[13px] text-muted">
+                  <span className="font-mono text-sm font-medium">{s.branch}</span>
+                  <span className="text-sm text-faint">{AGENT_LABELS[s.agent]}</span>
+                  <span className="flex-1 truncate text-sm text-muted">
                     {s.feature ? s.feature.title : s.defects.map(d => d.key).join(' · ')}
                   </span>
-                  <span className="text-[13px] text-faint">{relativeTime(s.createdAt)}</span>
-                  <span className="w-[92px] text-right text-[13px]" style={{ color: state.color }}>
-                    {state.label}
-                  </span>
+                  <span className="text-sm text-faint">{relativeTime(s.createdAt)}</span>
+                  <StatusBadge tone={s.state} className="w-23 justify-center">
+                    {STATE_LABEL[s.state]}
+                  </StatusBadge>
                   <Button size="sm" onClick={() => navigate(`/session/${s.id}`)}>เปิด</Button>
                   <Button size="sm" onClick={() => navigate(`/session/${s.id}/summary`)}>สรุป</Button>
                 </div>
