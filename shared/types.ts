@@ -153,6 +153,31 @@ export type CheckStage =
   | 'shape'     // หา array เจอไหมตาม itemsPath
   | 'map'       // map field ได้ครบไหม
 
+/** ชนิดของค่าที่เจอใน response — เอาไปกรองว่า field ไหน map ได้ */
+export type FieldKind = 'string' | 'number' | 'boolean' | 'array' | 'null'
+
+export interface DiscoveredField {
+  /** path แบบจุด ใช้กับ pick() ได้ตรงๆ เช่น "fields.status.name" */
+  path: string
+  kind: FieldKind
+  /** ค่าจริงของรายการที่ยกมาเป็นตัวอย่าง ย่อให้พอเห็น */
+  sample: string
+}
+
+/** ผลการลองยิง source ที่ยังไม่ได้บันทึก — ใช้ตอนตั้งค่าผ่าน wizard */
+export interface ProbeResult {
+  checks: CheckResult[]
+  /** field ทั้งหมดที่ไล่ได้จากรายการแรก */
+  fields: DiscoveredField[]
+  /** จำนวนรายการที่ response ส่งมา */
+  items: number
+  /**
+   * ค่าที่พบจริงของแต่ละ path ที่มีค่าซ้ำกันไม่เกิน MAX_VALUE_CHOICES ค่า
+   * ผู้ใช้เลือก status แล้วติ๊ก openStatuses ได้เลยโดยไม่ต้องยิงใหม่
+   */
+  values: Record<string, { value: string; count: number }[]>
+}
+
 export interface CheckResult {
   stage: CheckStage
   ok: boolean
@@ -163,6 +188,13 @@ export interface CheckResult {
   preview?: Defect
   /** key ที่มีให้เลือกจริง — ตัวนี้เปลี่ยนการตั้งค่าจาก "เดาแล้วลอง" เป็น "เห็นแล้วเลือก" */
   availableKeys?: string[]
+  /** เหมือน availableKeys แต่ไล่ field ซ้อนออกมาด้วย พร้อมค่าตัวอย่าง */
+  fields?: DiscoveredField[]
+  /**
+   * รายการที่ parse ได้ทั้งชุด — มีเฉพาะขั้น map และมีไว้ให้ probeSource นับค่า
+   * ที่พบจริงต่อได้โดยไม่ต้องยิง HTTP ซ้ำ · route ตัดออกก่อนส่งให้เบราว์เซอร์
+   */
+  items?: unknown[]
 }
 
 export type SessionState =

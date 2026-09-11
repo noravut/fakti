@@ -1,7 +1,7 @@
 import type {
   BootstrapResponse, BranchInfo, CheckResult, CreateSessionBody, Defect, DefectListResponse,
   DiffStat, DirtyConflict, FeatureSpec, FetchMode, GitStatus, QaPromptPayload, Session, Settings,
-  SourceConfig, TaskPromptPayload, ValidateResult,
+  ProbeResult, SourceConfig, TaskPromptPayload, ValidateResult,
   Workspace, WorkspaceColor,
 } from '@shared/types'
 
@@ -80,6 +80,24 @@ export const api = {
         `/api/sources/${encodeURIComponent(id)}/test${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`,
         { vars },
       ),
+    /** ลองยิง source ที่ยังไม่ได้บันทึก — คืน field ที่เจอพร้อมค่าที่พบจริง */
+    probe: (source: SourceConfig, vars: Record<string, string>) =>
+      post<ProbeResult>('/api/sources/probe', { source, vars }),
+    create: (source: SourceConfig) => post<SourceConfig>('/api/sources', source),
+    update: (id: string, source: SourceConfig) =>
+      req<SourceConfig>(`/api/sources/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(source),
+      }),
+    remove: (id: string) =>
+      req<{ ok: true }>(`/api/sources/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    /** ชื่อ secret ที่มีค่าอยู่แล้ว — ค่าจริงไม่เคยออกจาก server */
+    secretRefs: () => req<string[]>('/api/sources/secrets'),
+    saveSecret: (ref: string, value: string) =>
+      req<{ ok: true }>('/api/sources/secrets', {
+        method: 'PUT',
+        body: JSON.stringify({ ref, value }),
+      }),
   },
 
   sessions: {

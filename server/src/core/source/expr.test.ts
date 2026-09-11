@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  applyFilter, hasUnresolved, interpolate, interpolateAll, interpolateDeep, pick, topLevelKeys,
+  applyFilter, distinctValues, flattenFields, hasUnresolved, interpolate, interpolateAll,
+  interpolateDeep, pick, topLevelKeys,
 } from './expr'
 
 // ── interpolate ────────────────────────────────────────────────
@@ -112,4 +113,66 @@ test('applyFilter หลาย rule ต้องผ่านทุกข้อ',
     {},
   )
   assert.deepEqual(out.map(r => r.uuid), ['a'])
+})
+
+// ── flattenFields ──────────────────────────────────────────────
+
+test('flattenFields ไล่ field ซ้อนออกมาเป็น path แบบจุด', () => {
+  const item = { id: 7, fields: { summary: 'หัวข้อ', status: { name: 'New' } } }
+  const paths = flattenFields(item).map(f => f.path)
+  assert.deepEqual(paths, ['id', 'fields.summary', 'fields.status.name'])
+})
+
+test('flattenFields เก็บ array เป็น path ของตัวเอง ไม่ไล่เข้าไปข้างใน', () => {
+  // รายการแรกมี label ไม่ได้แปลว่ารายการอื่นมี เลยไม่เสนอ tags.0.label
+  const found = flattenFields({ tags: [{ label: 'ui' }] })
+  assert.deepEqual(found.map(f => f.path), ['tags'])
+  assert.equal(found[0]?.kind, 'array')
+})
+
+test('flattenFields บอกชนิดและค่าตัวอย่างของแต่ละ field', () => {
+  const byPath = new Map(flattenFields({ n: 3, s: 'ก', b: true, z: null }).map(f => [f.path, f]))
+  assert.equal(byPath.get('n')?.kind, 'number')
+  assert.equal(byPath.get('s')?.sample, 'ก')
+  assert.equal(byPath.get('b')?.kind, 'boolean')
+  assert.equal(byPath.get('z')?.kind, 'null')
+})
+
+test('flattenFields ย่อค่าที่ยาวเกินและไม่พังกับ input ที่ไม่ใช่ object', () => {
+  const long = flattenFields({ text: 'ก'.repeat(200) })
+  assert.equal(long[0]?.sample.endsWith('…'), true)
+  assert.ok(long[0] !== undefined && long[0].sample.length <= 81)
+  assert.deepEqual(flattenFields(null), [])
+  assert.deepEqual(flattenFields('ไม่ใช่ object'), [])
+  assert.deepEqual(flattenFields([1, 2]), [])
+})
+
+test('flattenFields หยุดที่ความลึกจำกัด ไม่วนไม่จบกับ object ซ้อนลึก', () => {
+  let deep: Record<string, unknown> = { leaf: 'ก้นสุด' }
+  for (let i = 0; i < 10; i++) deep = { nest: deep }
+  // ไม่ throw และไม่ค้าง — จำนวน field ที่ได้ต้องน้อยกว่าความลึกจริง
+  assert.ok(flattenFields(deep).length <= 1)
+})
+
+// ── distinctValues ─────────────────────────────────────────────
+
+test('distinctValues นับค่าที่พบจริงและเรียงจากบ่อยสุด', () => {
+  const items = [{ s: 'New' }, { s: 'Fixed' }, { s: 'New' }, { s: 'New' }]
+  assert.deepEqual(distinctValues(items, 's'), [
+    { value: 'New', count: 3 },
+    { value: 'Fixed', count: 1 },
+  ])
+})
+
+test('distinctValues ข้ามค่าว่าง null และ object', () => {
+  const items = [{ s: 'New' }, { s: '' }, { s: null }, { s: { a: 1 } }, {}]
+  assert.deepEqual(distinctValues(items, 's'), [{ value: 'New', count: 1 }])
+})
+
+test('distinctValues อ่าน path ซ้อนได้', () => {
+  const items = [{ f: { st: 'A' } }, { f: { st: 'A' } }, { f: { st: 'B' } }]
+  assert.deepEqual(distinctValues(items, 'f.st'), [
+    { value: 'A', count: 2 },
+    { value: 'B', count: 1 },
+  ])
 })

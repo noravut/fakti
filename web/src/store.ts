@@ -92,6 +92,8 @@ interface State {
   setActiveSource: (id: string) => Promise<void>
   refreshWorkspaces: () => Promise<void>
   refreshSessions: () => Promise<void>
+  /** อ่าน source ใหม่หลังเพิ่ม/แก้/ลบจากหน้าตั้งค่า */
+  refreshSources: () => Promise<void>
   refreshStatus: () => Promise<void>
   activeWorkspace: () => Workspace | undefined
   sourceFor: (workspace: Workspace | undefined) => SourceConfig | undefined
@@ -229,6 +231,15 @@ export const useStore = create<State>((set, get) => ({
       ? get().activeWorkspaceId
       : workspaces[0]?.id ?? null
     set({ workspaces, activeWorkspaceId: active, needsSetup: workspaces.length === 0 })
+  },
+
+  async refreshSources() {
+    const sources = await api.sources.list()
+    // ลบตัวที่กำลังใช้อยู่ = ต้องเลื่อนไปตัวอื่น ใช้กฎเดียวกับ bootstrap ฝั่ง server
+    const current = get().activeSourceId
+    const activeSourceId = sources.some(s => s.id === current) ? current : sources[0]?.id ?? null
+    set({ sources, activeSourceId })
+    await get().loadDefects(true)
   },
 
   async refreshSessions() {

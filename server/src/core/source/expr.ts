@@ -1,7 +1,7 @@
 // สามฟังก์ชันนี้คือแกนของทั้งระบบ source — ทุกอย่างที่เหลือเรียกผ่านมันหมด
 // เลยเป็นที่เดียวที่มี unit test
 
-import type { FilterRule } from '@shared/types'
+import type { DiscoveredField, FieldKind, FilterRule } from '@shared/types'
 
 const PLACEHOLDER_RE = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g
 
@@ -118,4 +118,71 @@ function matches(item: unknown, rule: FilterRule, vars: Record<string, string>):
   }
 
   return true
+}
+
+const MAX_DEPTH = 4
+const MAX_SAMPLE_CHARS = 80
+
+function kindOf(value: unknown): FieldKind | 'object' | 'skip' {
+  if (value === null) return 'null'
+  if (Array.isArray(value)) return 'array'
+  switch (typeof value) {
+    case 'string': return 'string'
+    case 'number': return 'number'
+    case 'boolean': return 'boolean'
+    case 'object': return 'object'
+    default: return 'skip'
+  }
+}
+
+function preview(value: unknown): string {
+  if (value === null) return 'null'
+  const text = typeof value === 'string' ? value : JSON.stringify(value) ?? ''
+  return text.length > MAX_SAMPLE_CHARS ? `${text.slice(0, MAX_SAMPLE_CHARS)}…` : text
+}
+
+/**
+ * ไล่ทุก field ใน item ตัวอย่างออกมาเป็น path แบบจุดพร้อมค่าที่เห็น
+ * นี่คือสิ่งที่ทำให้ตั้งค่า source ได้แบบ "เห็นแล้วเลือก" — topLevelKeys ไม่พอ
+ * เพราะ tracker อย่าง Jira ซ้อน field จริงไว้ใต้ fields.* หมด
+ *
+ * ลงลึกได้ MAX_DEPTH ชั้น · array ถูกเสนอเป็น path ของตัวมันเอง (เอาไป map tags ได้)
+ * แต่ไม่ไล่เข้าไปข้างใน เพราะ index ของรายการแรกไม่ได้แปลว่ารายการอื่นมีเหมือนกัน
+ */
+export function flattenFields(value: unknown, prefix = '', depth = 0): DiscoveredField[] {
+  if (depth > MAX_DEPTH || value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return []
+  }
+
+  const out: DiscoveredField[] = []
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const path = prefix ? `${prefix}.${key}` : key
+    const kind = kindOf(child)
+    if (kind === 'skip') continue
+    if (kind === 'object') {
+      out.push(...flattenFields(child, path, depth + 1))
+      continue
+    }
+    out.push({ path, kind, sample: preview(child) })
+  }
+  return out
+}
+
+/**
+ * ค่าที่พบจริงของ field หนึ่งในทุกรายการ เรียงจากที่เจอบ่อยสุด
+ * ใช้เสนอ openStatuses กับ severityOrder ให้ผู้ใช้ติ๊ก ไม่ต้องเดาว่า tracker
+ * สะกด status ว่าอะไรบ้าง
+ */
+export function distinctValues(items: unknown[], path: string): { value: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const item of items) {
+    const raw = pick(item, path)
+    if (raw === null || raw === undefined || typeof raw === 'object') continue
+    const value = String(raw)
+    if (!value) continue
+    counts.set(value, (counts.get(value) ?? 0) + 1)
+  }
+  return [...counts]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
 }

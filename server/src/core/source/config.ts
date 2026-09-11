@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
 import type { SourceConfig } from '@shared/types'
-import { PAT_DIR, addWarning } from '../config'
+import { PAT_DIR, addWarning, writeJson } from '../config'
 import defaults from '../../sources.default.json'
 
 const SOURCES_FILE = path.join(PAT_DIR, 'sources.json')
@@ -115,6 +115,17 @@ export function readSources(): { activeSourceId: string | null; sources: SourceC
   }
 }
 
+/**
+ * เขียน sources.json ทับทั้งไฟล์ — parse ผ่าน schema เดิมก่อนเสมอ
+ * จะได้ไม่มีทางเขียนไฟล์ที่ตัวเองอ่านกลับไม่ได้ลงไป
+ */
+export function writeSources(value: { activeSourceId: string | null; sources: SourceConfig[] }): void {
+  writeJson(SOURCES_FILE, fileSchema.parse(value))
+}
+
+/** schema ของ source ตัวเดียว — route เอาไป validate ของที่ส่งมาจากเบราว์เซอร์ */
+export const singleSourceSchema = sourceSchema
+
 export function findSource(id: string | null | undefined): SourceConfig | undefined {
   if (!id) return undefined
   return readSources().sources.find(s => s.id === id)
@@ -135,6 +146,34 @@ export function readSecret(ref: string): string | undefined {
 }
 
 export const SECRETS_PATH = SECRETS_FILE
+
+/**
+ * เก็บค่า secret ลง secrets.json ทีละ ref
+ * ไฟล์นี้เป็น 600 และห้ามอ่านกลับไปให้เบราว์เซอร์เด็ดขาด — มีแต่ทางเขียน
+ */
+export function writeSecret(ref: string, value: string): void {
+  ensureSecretsFile()
+  let current: Record<string, unknown> = {}
+  try {
+    current = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf8')) as Record<string, unknown>
+  } catch {
+    /* อ่านไม่ได้ = เริ่มใหม่จากว่าง ดีกว่าเขียนไม่ลงเลย */
+  }
+  const next = { ...current, [ref]: value }
+  const tmp = `${SECRETS_FILE}.tmp`
+  fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
+  fs.renameSync(tmp, SECRETS_FILE)
+}
+
+/** ref ที่มีค่าอยู่แล้ว — คืนแค่ชื่อ ไม่คืนค่า */
+export function secretRefs(): string[] {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf8')) as Record<string, unknown>
+    return Object.keys(parsed).filter(k => typeof parsed[k] === 'string' && parsed[k])
+  } catch {
+    return []
+  }
+}
 
 /** สร้างไฟล์เปล่าแบบ 600 ไว้ให้ผู้ใช้เติมเอง ถ้ายังไม่มี */
 export function ensureSecretsFile(): void {

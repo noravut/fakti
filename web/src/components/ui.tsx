@@ -1,7 +1,8 @@
 import { forwardRef } from 'react'
 import { CircleAlert, CircleCheck, Loader, TriangleAlert, X } from 'lucide-react'
 import type {
-  ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes,
+  ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes,
+  TextareaHTMLAttributes,
 } from 'react'
 
 /* ---------------------------------------------------------------- ปุ่ม */
@@ -120,6 +121,21 @@ export const Textarea = forwardRef<
     />
   )
 })
+
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
+  function Select({ className = '', ...rest }, ref) {
+    return (
+      <select
+        ref={ref}
+        {...rest}
+        className={
+          'h-9 w-full rounded border border-line bg-paper px-2.5 text-base text-ink ' +
+          `disabled:cursor-not-allowed disabled:border-hair disabled:text-faint ${className}`
+        }
+      />
+    )
+  },
+)
 
 /** label + hint/error ชุดเดียวกันทุกฟอร์ม — error ทับ hint เพราะสำคัญกว่า */
 export function Field({

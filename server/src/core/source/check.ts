@@ -1,7 +1,12 @@
-import type { CheckResult, FieldMap, SourceConfig } from '@shared/types'
+import type { CheckResult, FieldMap, ProbeResult, SourceConfig } from '@shared/types'
 import { SourceError, buildUrl, callSource } from './client'
-import { pick, topLevelKeys } from './expr'
+import { distinctValues, flattenFields, pick, topLevelKeys } from './expr'
 import { mapDefect } from './map'
+
+/** path ที่มีค่าต่างกันมากกว่านี้ไม่ใช่ตัวเลือกแบบ enum แล้ว ไม่ต้องส่งไปให้ติ๊ก */
+const MAX_VALUE_CHOICES = 30
+/** ดูค่าจากรายการเท่านี้พอ พอรู้ว่ามี status อะไรบ้างแล้ว ไม่ต้องไล่ทั้งพัน */
+const VALUE_SCAN_LIMIT = 200
 
 /** field ที่ map ประกาศไว้จริง (keyPrefix ไม่ใช่ field ที่ต้องไปหาใน item) */
 const MAPPED_FIELDS: (keyof FieldMap)[] =
@@ -101,6 +106,7 @@ export async function checkSource(
       stage: 'map',
       ok: true,
       detail: 'ไม่มีรายการให้ตรวจ mapping — ยังบอกไม่ได้ว่า map ถูกไหม',
+      items: [],
     })
     return results
   }
@@ -125,11 +131,53 @@ export async function checkSource(
     detail: parts.join(' · '),
     fix: broken.length ? 'เลือก key ที่ถูกต้องจากรายการด้านล่างมาใส่ใน map' : undefined,
     availableKeys: topLevelKeys(first),
+    fields: flattenFields(first),
+    items,
     preview: defect,
     sample: first,
   })
 
   return results
+}
+
+/**
+ * ลองยิง source ที่ยังไม่ได้บันทึก แล้วคืนทุกอย่างที่ wizard ต้องใช้ในรอบเดียว:
+ * ผลตรวจทีละขั้น · field ทั้งหมดที่ไล่ได้ · ค่าที่พบจริงของแต่ละ path
+ *
+ * ค่าที่พบจริงคือหัวใจ — ผู้ใช้เลือก path ของ status แล้วติ๊ก openStatuses
+ * จากค่าที่ tracker ส่งมาจริงได้เลย ไม่ต้องเดาว่าเขาสะกดว่า "New" หรือ "new"
+ */
+export async function probeSource(
+  src: SourceConfig,
+  vars: Record<string, string>,
+): Promise<ProbeResult> {
+  const checks = await checkSource(src, vars)
+  const last = checks[checks.length - 1]
+  const items = itemsOf(last)
+
+  const first = items[0]
+  const fields = first === undefined ? [] : flattenFields(first)
+  const scanned = items.slice(0, VALUE_SCAN_LIMIT)
+
+  const values: ProbeResult['values'] = {}
+  for (const field of fields) {
+    // array กับ null ไม่ใช่ตัวเลือกแบบ enum
+    if (field.kind === 'array' || field.kind === 'null') continue
+    const found = distinctValues(scanned, field.path)
+    if (found.length > 0 && found.length <= MAX_VALUE_CHOICES) values[field.path] = found
+  }
+
+  return { checks, fields, items: items.length, values }
+}
+
+/**
+ * ดึง array ของรายการกลับมาจากผลตรวจ — checkSource เก็บ response ที่ parse แล้ว
+ * ไว้ใน sample ของขั้นที่มันหยุด เลยไม่ต้องยิง HTTP ซ้ำรอบสอง
+ */
+function itemsOf(last: CheckResult | undefined): unknown[] {
+  if (!last) return []
+  if (last.stage === 'map') return last.items ?? []
+  return []
 }
 
 function tlsResult(src: SourceConfig, url: string): CheckResult {

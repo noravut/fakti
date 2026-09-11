@@ -128,7 +128,7 @@ function readJson<T>(file: string, schema: z.ZodType<T>, fallback: T): T {
 }
 
 /** เขียนลง .tmp แล้ว rename ทับ — กันไฟล์พังตอนถูกฆ่ากลางคัน */
-function writeJson(file: string, value: unknown): void {
+export function writeJson(file: string, value: unknown): void {
   ensureDir()
   const tmp = `${file}.tmp`
   fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8')

@@ -8,17 +8,22 @@ import { BackLink, useEscapeBack } from '../components/BackLink'
 import { WorkspaceForm } from '../components/WorkspaceForm'
 import { ColorDot } from '../components/WorkspaceChip'
 import { parseBranchList } from '../format'
+import { SourceWizard } from '../components/SourceWizard'
 import { Button, Card, Field, Input, SectionTitle, Segmented } from '../components/ui'
 
 export function Settings() {
   const {
     workspaces, activeWorkspaceId, sources, activeSourceId,
-    refreshWorkspaces, refreshStatus, setActiveWorkspace, setActiveSource, myName, setMyName,
+    refreshWorkspaces, refreshStatus, refreshSources, setActiveWorkspace, setActiveSource,
+    myName, setMyName,
     protectedBranches, setProtectedBranches, theme, setTheme, font, setFont,
   } = useStore()
   const [editing, setEditing] = useState<Workspace | null>(null)
   const [adding, setAdding] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  /** null = ปิด · 'new' = สร้างใหม่ · id = แก้ตัวนั้น */
+  const [sourceEditing, setSourceEditing] = useState<string | null>(null)
+  const [confirmSourceDelete, setConfirmSourceDelete] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [nameDraft, setNameDraft] = useState(myName ?? '')
   const [protectedDraft, setProtectedDraft] = useState(protectedBranches.join(', '))
@@ -39,6 +44,18 @@ export function Settings() {
       await reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'ลบไม่สำเร็จ')
+    }
+  }
+
+  async function removeSource(id: string) {
+    setError(null)
+    try {
+      await api.sources.remove(id)
+      setConfirmSourceDelete(null)
+      await refreshSources()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'ลบ source ไม่สำเร็จ')
+      setConfirmSourceDelete(null)
     }
   }
 
@@ -167,36 +184,78 @@ export function Settings() {
         </div>
 
         <div className="border-t border-hair px-5 pb-4 pt-4">
-          <SectionTitle>Defect source ตั้งต้น</SectionTitle>
-          <p className="mb-3 mt-1.5 text-sm text-faint">
-            repo ที่ไม่ได้เลือก source ของตัวเองจะใช้ตัวนี้ — ตั้งค่าราย repo ได้ที่ปุ่ม “แก้” ด้านบน
-          </p>
-
-          <div className="overflow-hidden rounded-card border border-hair bg-paper">
-            {sources.length === 0 ? (
-              <div className="px-4 py-4 text-sm text-faint">
-                ไม่มี source เลย — ตรวจ ~/.pat/sources.json
-              </div>
-            ) : (
-              sources.map(s => (
-                <div key={s.id} className="flex items-center gap-3 border-t border-hair px-4 py-3 first:border-t-0">
-                  <span className="font-mono text-sm font-medium">{s.id}</span>
-                  <span className="flex-1 truncate text-sm text-muted">{s.label}</span>
-                  {s.network === 'internal' && (
-                    <span className="rounded-chip bg-warn-soft px-2 py-0.5 text-xs text-warn">
-                      ในเน็ตเวิร์กบริษัท
-                    </span>
-                  )}
-                  <span className="truncate font-mono text-xs text-faint">{s.baseUrl}</span>
-                  {s.id === activeSourceId ? (
-                    <span className="rounded-chip bg-pine-soft px-2 py-0.5 text-xs text-pine">ตั้งต้น</span>
-                  ) : (
-                    <Button size="sm" onClick={() => void setActiveSource(s.id)}>ใช้อันนี้</Button>
-                  )}
-                </div>
-              ))
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <SectionTitle>Defect source</SectionTitle>
+            {sourceEditing === null && (
+              <Button size="sm" onClick={() => setSourceEditing('new')}>เพิ่ม source</Button>
             )}
           </div>
+          <p className="mb-3 mt-1.5 text-sm text-faint">
+            ที่ fakti ไปดึง defect มา · repo ที่ไม่ได้เลือก source ของตัวเองจะใช้ตัวที่ตั้งเป็น “ตั้งต้น”
+            — ตั้งค่าราย repo ได้ที่ปุ่ม “แก้” ด้านบน
+          </p>
+
+          {sourceEditing !== null ? (
+            <div className="rounded-card border border-line bg-paper px-4 py-4">
+              <SourceWizard
+                initial={sources.find(s => s.id === sourceEditing)}
+                onCancel={() => setSourceEditing(null)}
+                onSaved={() => {
+                  setSourceEditing(null)
+                  void refreshSources()
+                }}
+              />
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-card border border-hair bg-paper">
+              {sources.length === 0 ? (
+                <div className="px-4 py-4 text-sm text-faint">
+                  ยังไม่มี source — กด “เพิ่ม source” เพื่อต่อ tracker
+                </div>
+              ) : (
+                sources.map(s => (
+                  <div key={s.id} className="flex flex-col gap-2 border-t border-hair px-4 py-3 first:border-t-0">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-mono text-sm font-medium">{s.id}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm text-muted">{s.label}</span>
+                      {s.network === 'internal' && (
+                        <span className="rounded-chip bg-warn-soft px-2 py-0.5 text-xs text-warn">
+                          ในเน็ตเวิร์กบริษัท
+                        </span>
+                      )}
+                      <span className="truncate font-mono text-xs text-faint">{s.baseUrl}</span>
+                      {s.id === activeSourceId ? (
+                        <span className="rounded-chip bg-pine-soft px-2 py-0.5 text-xs text-pine">ตั้งต้น</span>
+                      ) : (
+                        <Button size="sm" onClick={() => void setActiveSource(s.id)}>ตั้งเป็นตั้งต้น</Button>
+                      )}
+                      <Button size="sm" onClick={() => setSourceEditing(s.id)}>แก้</Button>
+                      <Button size="sm" variant="danger" onClick={() => setConfirmSourceDelete(s.id)}>
+                        ลบ
+                      </Button>
+                    </div>
+
+                    {confirmSourceDelete === s.id && (
+                      <div className="flex flex-wrap items-center gap-3 rounded border border-danger-line bg-danger-soft px-3.5 py-2.5">
+                        <span className="flex-1 text-sm text-ink">
+                          ลบ <span className="font-mono">{s.id}</span> ออกจากรายการ?
+                          repo ที่ยังใช้อยู่จะดึง defect ไม่ได้
+                        </span>
+                        <Button size="sm" onClick={() => setConfirmSourceDelete(null)}>เก็บไว้</Button>
+                        <Button
+                          size="sm"
+                          variant="dangerSolid"
+                          onClick={() => void removeSource(s.id)}
+                        >
+                          ลบ source
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-3 border-t border-hair px-5 pb-4 pt-4">
