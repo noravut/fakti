@@ -100,9 +100,10 @@ See the [official Codex CLI reference](https://developers.openai.com/codex/cli/r
 If your working tree is dirty, the dialog asks first: **stash** (`git stash push -u`) or
 **continue on the current branch** (no new branch is created).
 
-> The defect list is **mock data** from `server/src/mock/defects.json`. There is no ticket
-> tracker integration yet. Two entries come from the original design doc; the rest are made up.
-> That file is bundled at build time, so edit it then re-run `pnpm -C server build`.
+> Out of the box the defect list is **mock data** from `server/src/mock/defects.json`, served
+> back to fakti as an ordinary source so it needs no network. Two entries come from the original
+> design doc; the rest are made up. That file is bundled at build time, so edit it then re-run
+> `pnpm -C server build`. To use a real tracker instead, see **Connecting a tracker** below.
 
 ---
 
@@ -149,15 +150,91 @@ Stack: Hono, node-pty, ws, zod on the server. React, Vite, Tailwind, wouter, zus
 
 Config lives in `~/.pat/` and is meant to be edited by hand:
 
-| File | Contents |
-|---|---|
-| `workspaces.json` | registered repos |
-| `sessions.json` | session history (latest 50) |
-| `settings.json` | active workspace, port |
+| File | Contents | Safe to share |
+|---|---|---|
+| `workspaces.json` | registered repos, and each repo's source variables | no — machine-specific paths |
+| `sessions.json` | session history (latest 50) | no |
+| `settings.json` | active workspace, port | no |
+| `sources.json` | how to reach your defect tracker | yes — holds no secrets |
+| `secrets.json` | the tokens `sources.json` refers to, created `600` | **never** |
 
 Every file is validated with zod on read. If one fails to parse, fakti backs it up to `.bak`,
 starts from empty, and shows a warning in the web UI. It never crashes on bad config.
 Writes are atomic (write to `.tmp`, then rename).
+
+### Connecting a tracker
+
+A tracker is described, not coded. A **source** is one JSON object saying where the API lives,
+which request lists defects, and which field of the response maps to which field fakti shows.
+No plugin, no subclass.
+
+On first run fakti writes `~/.pat/sources.json` from `server/src/sources.default.json`, which
+ships two sources: `mock` (the offline sample, active by default) and `netka`, a worked example
+against a real tracker. Copy either one and edit it:
+
+```jsonc
+{
+  "id": "jira",                                  // unique
+  "label": "Team Jira",                          // shown in Settings
+  "network": "internal",                         // internal = behind VPN, so unreachable is normal, not an error
+  "baseUrl": "https://{host}/rest/api/2",        // {vars} work here too
+  "auth": { "type": "bearer", "tokenRef": "jiraToken" },
+
+  "vars": [                                      // filled in per repo, under Settings
+    { "key": "host", "label": "Jira host", "required": true },
+    { "key": "projectKey", "label": "Project key", "required": true }
+  ],
+
+  "list": {
+    "method": "GET",
+    "path": "/search",
+    "query": { "jql": "project={projectKey} AND resolution=Unresolved" }
+  },
+  "detail": { "method": "GET", "path": "/issue/{id}" },
+
+  "itemsPath": "issues",                         // path to the array; "" if the body is already one
+
+  "map": {                                       // left: what fakti calls it. right: path in the API's JSON
+    "id": "id",
+    "key": "key",
+    "title": "fields.summary",
+    "severity": "fields.priority.name",
+    "status": "fields.status.name",
+    "reporter": "fields.reporter.displayName",
+    "createdAt": "fields.created"
+  },
+
+  "openStatuses": ["To Do", "In Progress"],      // anything else counts as closed
+  "severityOrder": ["Blocker", "Major", "Minor"] // heaviest first, then mapped onto critical/high/medium/low
+}
+```
+
+Only `id`, `label`, `baseUrl`, `list` and `map.id` are required.
+
+**Tokens never go in `sources.json`.** `auth` stores the *name* of a secret, and the value lives
+in `~/.pat/secrets.json` — which is why `sources.json` is the one config file you can commit.
+
+```jsonc
+// ~/.pat/sources.json — shareable
+"auth": { "type": "bearer", "tokenRef": "jiraToken" }
+
+// ~/.pat/secrets.json — mode 600, never shared
+{ "jiraToken": "the-real-value" }
+```
+
+Supported `auth.type`: `none`, `bearer` (`tokenRef`), `header` (`name` + `valueRef`),
+`basic` (`userRef` + `passRef`), `query` (`name` + `valueRef`).
+
+`sources.json` is re-read on every request, so edits take effect on the next page refresh — no
+restart. Settings has a **test** button that walks the request one stage at a time and says which
+stage broke: unreachable, TLS, auth, bad `itemsPath`, or a `map` field that matched nothing. When
+a field misses it prints the keys the response actually had, which is the fastest way to get
+`map` right.
+
+**Sharing a source with your team:** add it to `server/src/sources.default.json` and commit —
+it carries no secrets. Two caveats: that file is only consulted when `~/.pat/sources.json` does
+not yet exist, so people who already ran fakti must add the entry to their own copy; and it is
+bundled at build time, so re-run `pnpm -C server build` after editing.
 
 ---
 

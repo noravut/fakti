@@ -31,6 +31,66 @@
         "medium",
         "low"
       ]
+    },
+    {
+      "id": "netka",
+      "label": "Netka Defect Tracker",
+      "network": "internal",
+      "baseUrl": "https://{host}/api",
+      "insecureTLS": true,
+      "auth": {
+        "type": "none"
+      },
+      "vars": [
+        {
+          "key": "host",
+          "label": "Host ของ tracker",
+          "required": true,
+          "hint": "เฉพาะชื่อโฮสต์หรือ IP ไม่ต้องใส่ https:// เช่น tracker.company.local"
+        },
+        {
+          "key": "productId",
+          "label": "Product ID",
+          "required": true,
+          "hint": "ดูจาก URL ตอนเปิดหน้า product ในระบบ"
+        }
+      ],
+      "list": {
+        "method": "GET",
+        "path": "/defects",
+        "query": {
+          "product_id": "{productId}"
+        }
+      },
+      "detail": {
+        "method": "GET",
+        "path": "/defects/{id}"
+      },
+      "itemsPath": "",
+      "map": {
+        "id": "id",
+        "key": "id",
+        "keyPrefix": "DEF-",
+        "title": "name",
+        "description": "description",
+        "severity": "severity",
+        "status": "status",
+        "reporter": "raise_by_name",
+        "assignee": "assigned_to_name",
+        "createdAt": "created_at",
+        "tags": "tags"
+      },
+      "openStatuses": [
+        "New",
+        "Assigned",
+        "Reopened"
+      ],
+      "severityOrder": [
+        "Critical",
+        "Major",
+        "Minor",
+        "Trivial"
+      ]
     }
   ]
 }
