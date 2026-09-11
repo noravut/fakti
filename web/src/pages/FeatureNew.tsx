@@ -64,27 +64,28 @@ export function FeatureNew() {
           <div className="px-5 py-6">
             <EmptyState
               title="ยังไม่มี repo ให้ทำงาน"
-              hint="เพิ่ม repo ในหน้าตั้งค่าก่อน แล้วกลับมาสร้าง feature"
+              hint="เพิ่ม repo ในหน้าตั้งค่าก่อน แล้วกลับมาสั่งงาน"
               action={<Link href="/settings"><Button size="sm">ไปหน้าตั้งค่า</Button></Link>}
             />
           </div>
         ) : (
           <div className="flex flex-col gap-5 px-5 pb-5 pt-4">
             <div className="flex flex-col gap-1">
-              <SectionTitle>สร้าง feature</SectionTitle>
+              <SectionTitle>สั่งงานเอง</SectionTitle>
               <span className="text-sm text-muted">
-                พิมพ์สิ่งที่ feature นี้ควรทำได้ บรรทัดละข้อ ผู้ช่วยเขียนโค้ด จะทำตามนั้น
+                งานที่ไม่ได้มาจาก tracker — เพิ่มความสามารถ แก้ของเดิม ถอดของที่ไม่ใช้ หรืองาน maintenance
+                พิมพ์สิ่งที่ต้องได้หลังทำเสร็จ บรรทัดละข้อ ผู้ช่วยเขียนโค้ด จะทำตามนั้น
                 ทำเสร็จกด "ทวน requirement" ในหน้า session เพื่อให้มันตรวจว่าครบทุกข้อ
               </span>
             </div>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm text-muted">ชื่อ feature</span>
+              <span className="text-sm text-muted">ชื่องาน</span>
               <Input
                 autoFocus
                 value={title}
                 spellCheck={false}
-                placeholder="เช่น Export รายงานเป็น CSV"
+                placeholder="เช่น Export รายงานเป็น CSV · ถอดเมนูตั้งค่าเก่าออก"
                 onChange={e => setTitle(e.target.value)}
                 className="w-full"
               />
@@ -92,7 +93,7 @@ export function FeatureNew() {
 
             <label className="flex flex-col gap-1.5">
               <span className="text-sm text-muted">
-                สิ่งที่ควรทำได้
+                สิ่งที่ต้องได้หลังทำเสร็จ
                 <span className="text-faint"> · บรรทัดละข้อ · fakti ตั้งรหัส REQ-n ให้ ผู้ช่วยเขียนโค้ด อ้างใน commit</span>
               </span>
               <textarea

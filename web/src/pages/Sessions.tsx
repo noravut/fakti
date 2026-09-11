@@ -38,7 +38,7 @@ export function Sessions() {
           {sessions.length === 0 ? (
             <EmptyState
               title="ยังไม่เคยเปิด session"
-              hint="เลือก defect จากหน้าแรก หรือสร้าง feature แล้วสั่งให้ agent เริ่มทำ"
+              hint="เลือก defect จากหน้าแรก หรือสั่งงานเองแล้วให้ agent ลงมือ"
             />
           ) : (
             sessions.map(s => {

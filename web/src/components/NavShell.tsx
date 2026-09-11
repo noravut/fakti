@@ -12,7 +12,7 @@ interface Item {
 
 const ITEMS: Item[] = [
   { href: '/', label: 'Defect', icon: <CircleAlert aria-hidden size={18} /> },
-  { href: '/feature/new', label: 'สร้าง feature', icon: <Plus aria-hidden size={18} /> },
+  { href: '/feature/new', label: 'สั่งงานเอง', icon: <Plus aria-hidden size={18} /> },
   { href: '/sessions', label: 'Session', icon: <Terminal aria-hidden size={18} /> },
   { href: '/settings', label: 'ตั้งค่า', icon: <SlidersHorizontal aria-hidden size={18} /> },
 ]

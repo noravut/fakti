@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { useLocation } from 'wouter'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Defect } from '@shared/types'
@@ -12,7 +13,7 @@ import { DefectRow, DefectRowSkeleton } from '../components/DefectRow'
 import { DefectFilters } from '../components/DefectFilters'
 import { BulkBar } from '../components/BulkBar'
 import { ConfirmDialog, type ConfirmPayload } from '../components/ConfirmDialog'
-import { Button, Card, EmptyState, ErrorBox, SectionTitle } from '../components/ui'
+import { Button, Card, EmptyState, ErrorBox, IconButton, SectionTitle } from '../components/ui'
 
 /** กรองใน memory เร็วอยู่แล้ว หน่วงแค่พอให้ไม่ re-render ทุกตัวอักษร */
 const SEARCH_DEBOUNCE_MS = 150
@@ -175,10 +176,15 @@ export function DefectList() {
                 {defectsMeta.sourceLabel} · อัปเดต{relativeTime(defectsMeta.fetchedAt)}
               </span>
             )}
-            <Button size="sm" onClick={() => void loadDefects(true)} disabled={defectsRefreshing}>
-              โหลดใหม่
-            </Button>
-            <Button size="sm" onClick={() => navigate('/feature/new')}>สร้าง feature</Button>
+            <IconButton
+              label="โหลดใหม่"
+              variant="secondary"
+              onClick={() => void loadDefects(true)}
+              disabled={defectsRefreshing}
+            >
+              <RefreshCw aria-hidden size={18} className={defectsRefreshing ? 'pat-pulse' : ''} />
+            </IconButton>
+            <Button onClick={() => navigate('/feature/new')}>สั่งงานเอง</Button>
           </div>
         </div>
 

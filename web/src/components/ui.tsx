@@ -42,11 +42,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean
 }
 
-export function Button({
+// forwardRef เพราะ Radix asChild ส่ง ref มาให้ (เช่น Popover.Close) ถ้าไม่รับ React จะเตือนและ ref หาย
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({
   variant = 'secondary', size = 'md', loading = false, disabled, className = '', children, ...rest
-}: ButtonProps) {
+}, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       disabled={disabled ?? loading}
       {...rest}
@@ -56,7 +58,7 @@ export function Button({
       {children}
     </button>
   )
-}
+})
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** icon button ต้องมีชื่อเสมอ ไม่งั้น screen reader อ่านไม่ออกว่าปุ่มอะไร */
