@@ -143,7 +143,7 @@ server/src/core/         config (~/.pat + zod), git, session (pty lifecycle), pr
 server/src/core/source/  tracker layer — declarative sources, not per-tracker code:
                          client (HTTP + auth) · expr (field paths) · map (→ Defect)
                          service (cache) · check (the staged test in Settings)
-server/src/routes/       workspaces · defects · sessions · sources
+server/src/routes/       workspaces · defects · sessions · sources (CRUD + probe)
 server/src/ws.ts         WebSocket terminal bridge
 web/src/components/ui.tsx  the design system — every button, tag, modal and state lives here
 web/src/                 React 18 + Vite + Tailwind + xterm.js, wouter routing
@@ -193,9 +193,27 @@ A tracker is described, not coded. A **source** is one JSON object saying where 
 which request lists defects, and which field of the response maps to which field fakti shows.
 No plugin, no subclass.
 
-On first run fakti writes `~/.pat/sources.json` from `server/src/sources.default.json`, which
-ships two sources: `mock` (the offline sample, active by default) and `netka`, a worked example
-against a real tracker. Copy either one and edit it:
+**Do it in the UI.** Settings → Defect source → **เพิ่ม source**. Three steps that appear as you
+go:
+
+1. **Connect** — label, `baseUrl`, the path that lists defects, auth, and any `{variables}` your
+   URL needs. Press **ดึงตัวอย่างจาก API**.
+2. **Map the fields** — fakti calls the API for real, walks the first item, and offers every
+   field it found as a dropdown with the value it saw. You pick; you never type a path or read
+   the tracker's API docs to guess where `title` lives. A preview row shows the mapped result as
+   you go.
+3. **Statuses and severities** — tick which statuses count as open and order the severities,
+   from the values your tracker actually returned. No guessing whether it spells it `New` or
+   `new`.
+
+Tokens typed here are written to `~/.pat/secrets.json` for you, never into `sources.json`.
+
+On first run fakti also writes `~/.pat/sources.json` from `server/src/sources.default.json`,
+which ships two sources: `mock` (the offline sample, active by default) and `netka`, a worked
+example against a real tracker.
+
+Editing the file by hand still works, and is the only way to reach a few advanced keys the form
+does not cover (`clientFilter`, `context`, `titleCleanup`, `detail` requests, POST bodies):
 
 ```jsonc
 {
@@ -236,6 +254,9 @@ against a real tracker. Copy either one and edit it:
 
 Only `id`, `label`, `baseUrl`, `list` and `map.id` are required.
 
+`map` values are dotted paths, so nested responses work: `fields.status.name` reaches into
+objects, and the wizard discovers those paths up to four levels deep.
+
 **Tokens never go in `sources.json`.** `auth` stores the *name* of a secret, and the value lives
 in `~/.pat/secrets.json` — which is why `sources.json` is the one config file you can commit.
 
@@ -250,11 +271,10 @@ in `~/.pat/secrets.json` — which is why `sources.json` is the one config file 
 Supported `auth.type`: `none`, `bearer` (`tokenRef`), `header` (`name` + `valueRef`),
 `basic` (`userRef` + `passRef`), `query` (`name` + `valueRef`).
 
-`sources.json` is re-read on every request, so edits take effect on the next page refresh — no
-restart. Settings has a **test** button that walks the request one stage at a time and says which
-stage broke: unreachable, TLS, auth, bad `itemsPath`, or a `map` field that matched nothing. When
-a field misses it prints the keys the response actually had, which is the fastest way to get
-`map` right.
+`sources.json` is re-read on every request, so hand edits take effect on the next page refresh —
+no restart. Each repo's Settings also has a **test** button that walks the request one stage at a
+time and says which stage broke: unreachable, TLS, auth, bad `itemsPath`, or a `map` field that
+matched nothing. When a field misses it prints the keys the response actually had.
 
 **Sharing a source with your team:** add it to `server/src/sources.default.json` and commit —
 it carries no secrets. Two caveats: that file is only consulted when `~/.pat/sources.json` does
@@ -357,6 +377,7 @@ title — it never blocks anything.
 
 ## Not implemented yet
 
-Adding or editing a source from the web UI — Settings can select and test one, but new sources
-are still written into `sources.json` by hand · guessing the repo from defect keywords ·
-commit, push or opening a PR from the web UI · commenting back on tickets · multi-user and auth.
+Guessing the repo from defect keywords · commit, push or opening a PR from the web UI ·
+commenting back on tickets · multi-user and auth. The source form covers the common keys;
+`clientFilter`, `context`, `titleCleanup`, `detail` requests and POST bodies are still
+file-only.
