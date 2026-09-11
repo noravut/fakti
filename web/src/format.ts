@@ -16,11 +16,12 @@ export function relativeTime(iso: string): string {
   return new Date(then).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
 }
 
-export const SEVERITY_STYLE: Record<Severity, { color: string; background: string }> = {
-  critical: { color: '#A32E2E', background: '#A32E2E1F' },
-  high: { color: '#A32E2E', background: '#A32E2E12' },
-  medium: { color: '#A66A0F', background: '#A66A0F12' },
-  low: { color: '#8E939C', background: '#8E939C1F' },
+/** โทน Tag ของแต่ละระดับ — สีจริงอยู่ใน token ไม่ hardcode hex ที่นี่ */
+export const SEVERITY_TONE: Record<Severity, 'danger' | 'warn' | 'neutral' | 'faint'> = {
+  critical: 'danger',
+  high: 'warn',
+  medium: 'neutral',
+  low: 'faint',
 }
 
 /** คำที่ไม่ช่วยแยกแยะ ตัดออกก่อนทำ slug */

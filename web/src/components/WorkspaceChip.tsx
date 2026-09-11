@@ -1,4 +1,5 @@
 import type { Workspace, WorkspaceColor } from '@shared/types'
+import { ChevronDown } from 'lucide-react'
 import { WORKSPACE_COLOR_HEX } from '@shared/types'
 
 export function ColorDot({ color, size = 8 }: { color: WorkspaceColor; size?: number }) {
@@ -52,9 +53,9 @@ export function WorkspaceSelect({ workspaces, value, onChange, disabled }: Selec
             <span className="font-mono text-xs">{selected.id}</span>
           </>
         ) : (
-          <span className="text-[13px]">เลือก repo</span>
+          <span className="text-sm">เลือก repo</span>
         )}
-        <span className="text-[10px] text-faint">▾</span>
+        <ChevronDown aria-hidden size={14} className="text-faint" />
       </span>
       <select
         aria-label="เลือก repo"

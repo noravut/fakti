@@ -27,23 +27,23 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.message === null) return this.props.children
 
     return (
-      <div className="flex flex-col gap-2 rounded-card border border-danger bg-danger/5 px-5 py-[18px]">
+      <div className="flex flex-col gap-2 rounded-card border border-danger bg-danger-soft px-5 py-4">
         <span className="text-sm font-semibold text-danger">หน้านี้แสดงผลไม่ได้</span>
-        <span className="font-mono text-[13px] text-muted">{this.state.message}</span>
-        <span className="text-[13px] text-muted">
+        <span className="font-mono text-sm text-muted">{this.state.message}</span>
+        <span className="text-sm text-muted">
           รายละเอียดเต็มอยู่ใน console ของ browser
         </span>
         <div className="mt-1 flex gap-2.5">
           <button
             type="button"
             onClick={() => this.setState({ message: null })}
-            className="rounded border border-line bg-paper px-3 py-1.5 text-[13px]"
+            className="rounded border border-line bg-paper px-3 py-1.5 text-sm"
           >
             ลองแสดงใหม่
           </button>
           <a
             href="/"
-            className="rounded border border-line bg-paper px-3 py-1.5 text-[13px] text-ink no-underline"
+            className="rounded border border-line bg-paper px-3 py-1.5 text-sm text-ink no-underline"
           >
             กลับไป Defect list
           </a>

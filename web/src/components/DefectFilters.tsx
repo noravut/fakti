@@ -1,7 +1,8 @@
 import { forwardRef } from 'react'
+import { X } from 'lucide-react'
 import type { Severity } from '@shared/types'
 import { PRESETS, activeChips, type Facets, type Filters, type PresetId } from '../filters'
-import { Input } from './ui'
+import { Input, Toggle } from './ui'
 
 interface Props {
   filters: Filters
@@ -42,19 +43,9 @@ export const DefectFilters = forwardRef<HTMLInputElement, Props>(
           {PRESETS.map(p => {
             const on = filters.presets.includes(p.id)
             return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => togglePreset(p.id)}
-                className={
-                  'rounded-chip border px-2.5 py-1 text-[13px] transition-colors ' +
-                  (on
-                    ? 'border-pine bg-pine/10 text-pine'
-                    : 'border-line bg-paper text-muted hover:text-ink')
-                }
-              >
+              <Toggle key={p.id} pressed={on} onClick={() => togglePreset(p.id)}>
                 {p.label}
-              </button>
+              </Toggle>
             )
           })}
         </div>
@@ -88,12 +79,12 @@ export const DefectFilters = forwardRef<HTMLInputElement, Props>(
                 type="button"
                 title={c.full}
                 onClick={() => onChange(c.without)}
-                className="inline-flex max-w-full items-center gap-1.5 rounded-chip border border-line bg-surface px-2 py-0.5 text-[13px] text-muted hover:border-danger hover:text-danger"
+                className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border border-line bg-paper px-3 text-sm text-muted transition-colors hover:border-danger hover:text-danger"
               >
                 {/* ชื่อ field ห้ามหด ย่อได้เฉพาะค่า */}
                 {c.field && <span className="shrink-0">{c.field}:</span>}
                 <span className="min-w-0 truncate">{c.value}</span>
-                <span aria-hidden className="shrink-0 text-faint">✕</span>
+                <X aria-hidden size={14} className="shrink-0 text-faint" />
               </button>
             ))}
           </div>
@@ -117,7 +108,7 @@ function FacetSelect({ label, facet, chosen, onPick }: FacetProps) {
       value=""
       disabled={left.length === 0}
       onChange={e => e.target.value && onPick(e.target.value)}
-      className="rounded border border-line bg-paper px-2 py-1 text-[13px] text-muted disabled:opacity-40"
+      className="h-7 rounded border border-line bg-paper px-2 text-sm text-muted disabled:cursor-not-allowed disabled:opacity-40"
     >
       <option value="">{label}</option>
       {left.map(f => (

@@ -2,7 +2,9 @@ import { useEffect } from 'react'
 import { Redirect, Route, Switch } from 'wouter'
 import { startPolling, useStore } from './store'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { NavShell } from './components/NavShell'
 import { GoHome } from './components/GoHome'
+import { Banner, Button, Skeleton, Toast } from './components/ui'
 import { Setup } from './pages/Setup'
 import { DefectList } from './pages/DefectList'
 import { FeatureNew } from './pages/FeatureNew'
@@ -22,26 +24,25 @@ export function App() {
   }, [bootstrap])
 
   return (
-    <div className="mx-auto flex max-w-page flex-col gap-4 px-6 py-9">
+    <NavShell>
       {warnings.length > 0 && (
-        <div className="flex flex-col gap-2 rounded-card border border-warn/40 bg-warn/10 px-4 py-3.5">
-          {warnings.map(w => (
-            <span key={w} className="whitespace-pre-wrap text-[13px] text-warn-deep">{w}</span>
-          ))}
-          <button
-            type="button"
-            onClick={dismissWarnings}
-            className="self-start text-[13px] text-muted underline"
-          >
-            รับทราบ
-          </button>
-        </div>
+        <Banner
+          title={warnings.join('\n')}
+          action={
+            <Button size="sm" onClick={dismissWarnings}>รับทราบ</Button>
+          }
+        />
       )}
 
       <Flash />
 
       {!ready ? (
-        <div className="px-1 text-[15px] text-faint">กำลังโหลด…</div>
+        // รูปร่างเท่าของจริงเสมอ ห้ามมีคำว่า "กำลังโหลด" ลอยๆ (G9)
+        <div className="flex max-w-page flex-col gap-3">
+          <Skeleton className="h-7 w-70" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
       ) : (
         <ErrorBoundary>
           <Switch>
@@ -57,7 +58,7 @@ export function App() {
           </Switch>
         </ErrorBoundary>
       )}
-    </div>
+    </NavShell>
   )
 }
 
@@ -73,14 +74,10 @@ function Flash() {
   if (!flash) return null
 
   return (
-    <div
-      role="status"
-      className="flex items-center gap-3 rounded-card border border-warn/40 bg-warn/10 px-4 py-3"
-    >
-      <span className="flex-1 text-[13px] text-warn-deep">{flash}</span>
-      <button type="button" onClick={() => setFlash(null)} className="text-[13px] text-muted underline">
-        ปิด
-      </button>
-    </div>
+    <Toast
+      tone="error"
+      message={flash}
+      action={<Button size="sm" variant="ghost" onClick={() => setFlash(null)}>ปิด</Button>}
+    />
   )
 }

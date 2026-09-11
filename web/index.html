@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="th">
+<html lang="th" data-theme="dark" data-font="plex">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -7,9 +7,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=Anuphan:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
+    <!-- อ่านค่าที่เลือกไว้ก่อน React mount ไม่งั้นจอกระพริบจากธีมเริ่มต้นไปธีมจริง -->
+    <script>
+      try {
+        var p = JSON.parse(localStorage.getItem('fakti.appearance') || '{}')
+        if (p.theme === 'light') document.documentElement.dataset.theme = 'light'
+        if (p.font === 'anuphan') document.documentElement.dataset.font = 'anuphan'
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
