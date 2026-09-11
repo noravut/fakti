@@ -5,7 +5,8 @@ import { mapDefect } from './map'
 
 /** field ที่ map ประกาศไว้จริง (keyPrefix ไม่ใช่ field ที่ต้องไปหาใน item) */
 const MAPPED_FIELDS: (keyof FieldMap)[] =
-  ['id', 'key', 'title', 'description', 'severity', 'status', 'reporter', 'createdAt']
+  ['id', 'key', 'title', 'description', 'severity', 'status', 'reporter', 'assignee', 'tags',
+    'createdAt']
 
 /**
  * ตรวจทีละขั้นแล้วบอกว่าพังตรงไหน ไม่ใช่ตอบแค่ ok/fail

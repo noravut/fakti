@@ -3,7 +3,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { z } from 'zod'
 import type { Session, Settings, Workspace } from '@shared/types'
-import { DEFAULT_PROTECTED_BRANCHES, WORKSPACE_COLORS } from '@shared/types'
+import { DEFAULT_PROTECTED_BRANCHES, SESSION_AGENTS, WORKSPACE_COLORS } from '@shared/types'
 
 export const PAT_DIR = path.join(os.homedir(), '.pat')
 
@@ -42,13 +42,24 @@ const defectSchema = z.object({
   url: z.string().optional(),
 })
 
+const featureSchema = z.object({
+  title: z.string().min(1),
+  context: z.string().optional(),
+  requirements: z.array(z.object({ key: z.string().min(1), text: z.string().min(1) })).min(1),
+  nonGoals: z.array(z.string()).optional(),
+})
+
 const sessionSchema = z.object({
   id: z.string().min(1),
+  agent: z.enum(SESSION_AGENTS).default('claude'),
   workspaceId: z.string().min(1),
   branch: z.string().min(1),
   baseCommit: z.string(),
+  /** record ก่อนมี feature session ไม่มี field นี้ — ถือเป็น defect */
+  kind: z.enum(['defect', 'feature']).default('defect'),
   defectIds: z.array(z.string()),
   defects: z.array(defectSchema),
+  feature: featureSchema.optional(),
   state: z.enum(['working', 'waiting', 'idle', 'closed']),
   createdAt: z.string(),
   lastActivityAt: z.string(),

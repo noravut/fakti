@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import type { IPty } from 'node-pty'
 import type {
-  BranchChoice, BranchOwnership, Defect, DiffStat, DirtyStrategy, ServerMessage, Session,
-  SessionState, Workspace,
+  BranchChoice, BranchOwnership, Defect, DiffStat, DirtyStrategy, FeatureSpec, ServerMessage,
+  Session, SessionAgent, SessionState, Workspace,
 } from '@shared/types'
 import { isProtectedBranch, protectedBranchesFor, readSessions, writeSessions } from './config'
 import * as git from './git'
-import { QA_FILE, buildPrompt, buildQaPrompt, writeTaskFile } from './prompt'
+import {
+  QA_FILE, buildFeaturePrompt, buildFeatureQaPrompt, buildPrompt, buildQaPrompt, excludeReportFiles,
+  writeTaskFile,
+} from './prompt'
 
 /** output ที่เก็บไว้ให้ client ที่ต่อใหม่ ~200KB ต่อ session */
 const REPLAY_BUFFER_BYTES = 200 * 1024
@@ -85,6 +88,18 @@ function looksLikeQuestion(tail: string): boolean {
   return /❯/.test(recent)
     || /\(y\/n\)/i.test(recent)
     || /^\s*Do you want/m.test(recent)
+    || /Would you like to (?:run|proceed|allow)/i.test(recent)
+}
+
+/**
+ * env ของ agent — ใช้ของ server ทั้งก้อน แต่ปลด NO_COLOR/FORCE_COLOR ที่ CLI ตัวแม่ (codex/claude)
+ * ตั้งไว้ตอนสั่ง `pnpm dev` ไม่งั้น agent คิดว่าปลายทางไม่รองรับสี แล้วพ่น output ขาวดำมาทั้งจอ
+ */
+function agentEnv(): Record<string, string> {
+  const env = { ...process.env, COLORTERM: 'truecolor' } as Record<string, string>
+  delete env.NO_COLOR
+  delete env.FORCE_COLOR
+  return env
 }
 
 export class SessionManager {
@@ -134,13 +149,16 @@ export class SessionManager {
 
   async create(input: {
     workspace: Workspace
+    agent?: SessionAgent
     defects: Defect[]
     branch: BranchChoice
     dirtyStrategy?: DirtyStrategy
-    /** ฉบับที่ผู้ใช้อ่าน/แก้แล้วจาก preview — ไม่มี = สร้างจาก defects ตามปกติ */
+    /** มีค่า = feature session — defects ต้องเป็น [] */
+    feature?: FeatureSpec
+    /** ฉบับที่ผู้ใช้อ่าน/แก้แล้วจาก preview — ไม่มี = สร้างจาก defects/feature ตามปกติ */
     prompt?: string
   }): Promise<Session> {
-    const { workspace, defects, branch, dirtyStrategy } = input
+    const { workspace, defects, branch, dirtyStrategy, feature } = input
 
     if (!git.isUsablePath(workspace.path)) {
       throw new HttpError(400, `ไม่พบโฟลเดอร์ ${workspace.path} — repo ถูกย้ายหรือลบไปแล้วหรือเปล่า`)
@@ -167,18 +185,21 @@ export class SessionManager {
 
     const session: Session = {
       id: randomUUID(),
+      agent: input.agent ?? 'claude',
       workspaceId: workspace.id,
       branch: workingBranch,
       baseCommit,
+      kind: feature ? 'feature' : 'defect',
       defectIds: defects.map(d => d.id),
       defects,
+      feature,
       state: 'working',
       createdAt: now,
       lastActivityAt: now,
       branchOwnership: ownership,
     }
 
-    this.spawn(session, input.prompt ?? buildPrompt(defects))
+    this.spawn(session, input.prompt ?? taskPrompt(session))
 
     this.records.push(session)
     this.persist()
@@ -253,7 +274,7 @@ export class SessionManager {
     session.state = 'working'
     session.closedAt = undefined
     session.lastActivityAt = new Date().toISOString()
-    this.spawn(session, buildPrompt(session.defects))
+    this.spawn(session, taskPrompt(session))
     this.persist()
     return session
   }
@@ -262,6 +283,9 @@ export class SessionManager {
   async append(id: string, defects: Defect[]): Promise<Session> {
     const session = this.record(id)
     if (!session) throw new HttpError(404, 'ไม่พบ session')
+    if (session.kind === 'feature') {
+      throw new HttpError(409, 'session นี้กำลังทำ feature อยู่ — เปิด session ใหม่สำหรับ defect แทน')
+    }
     const live = this.live.get(id)
     if (!live || live.exited) throw new HttpError(409, 'session นี้ปิดไปแล้ว')
 
@@ -283,7 +307,7 @@ export class SessionManager {
     const session = this.record(id)
     if (!session) throw new HttpError(404, 'ไม่พบ session')
     const files = await this.diff(id).then(d => d.files.map(f => f.path)).catch(() => [])
-    return buildQaPrompt(session.defects, files)
+    return session.feature ? buildFeatureQaPrompt(session.feature, files) : buildQaPrompt(session.defects, files)
   }
 
   /** ส่ง prompt QA (ที่ผู้ใช้ตรวจแล้ว) เข้า pty เดิม — ผู้ใช้เป็นคนเลือกจังหวะเอง */
@@ -307,21 +331,26 @@ export class SessionManager {
 
     const pty = loadPty()
 
+    // Codex รับ prompt ผ่าน argument เพื่อไม่ให้การพิมพ์ชนกับหน้าจอเริ่มต้น
+    excludeReportFiles(workspace.path)
+    const line = writeTaskFile(workspace.path, prompt)
+    const args = session.agent === 'codex' ? ['--no-alt-screen', line] : []
+
     let term: IPty
     try {
-      term = pty.spawn('claude', [], {
+      term = pty.spawn(session.agent, args, {
         name: 'xterm-256color',
         cols: DEFAULT_COLS,
         rows: DEFAULT_ROWS,
         cwd: workspace.path,
-        // ส่ง env ทั้งก้อน ไม่งั้น claude หา credential ใน ~/.claude ไม่เจอ
-        env: process.env as Record<string, string>,
+        // ใช้ credentials และการตั้งค่า CLI ของผู้ใช้ รวมถึง CODEX_HOME
+        env: agentEnv(),
       })
     } catch (err) {
       throw new HttpError(
         500,
-        `เปิด claude ไม่ได้: ${err instanceof Error ? err.message : String(err)}\n` +
-        'เช็คว่า claude อยู่ใน PATH แล้วลองใหม่',
+        `เปิด ${session.agent} ไม่ได้: ${err instanceof Error ? err.message : String(err)}\n` +
+        `เช็คว่า ${session.agent} อยู่ใน PATH และล็อกอินแล้ว จากนั้นลองใหม่`,
       )
     }
 
@@ -352,8 +381,7 @@ export class SessionManager {
     })
 
     // prompt ไปทางไฟล์ ส่งเข้า pty แค่บรรทัดเดียว — ดูเหตุผลใน core/prompt.ts
-    const line = writeTaskFile(workspace.path, prompt)
-    term.write(`${line}\r`)
+    if (session.agent === 'claude') term.write(`${line}\r`)
   }
 
   private appendBuffer(live: LiveSession, data: string): void {
@@ -578,6 +606,11 @@ export class HttpError extends Error {
   constructor(readonly status: number, message: string) {
     super(message)
   }
+}
+
+/** prompt ตั้งต้นของ session — feature ใช้ requirement ที่พิมพ์เอง defect ใช้รายการจาก tracker */
+function taskPrompt(session: Session): string {
+  return session.feature ? buildFeaturePrompt(session.feature) : buildPrompt(session.defects)
 }
 
 /** ชื่อที่เอาไปติดใน stash message — บอกได้ว่า stash นี้มาจากงานไหน */

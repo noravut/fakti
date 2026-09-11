@@ -4,10 +4,9 @@ import type { DiffStat, Session as SessionRecord } from '@shared/types'
 import { ApiError, api } from '../api'
 import { useStore } from '../store'
 import { useGoHomeWithMessage } from '../components/GoHome'
-import { Header } from '../components/Header'
 import { BackLink, useEscapeBack } from '../components/BackLink'
 import { ColorDot } from '../components/WorkspaceChip'
-import { Button, Card, DangerButton, ErrorBox, SectionTitle } from '../components/ui'
+import { Button, Card, ErrorBox, SectionTitle } from '../components/ui'
 
 /** แถบสัดส่วน + / − ท้ายแถวไฟล์ กว้างสุด 60px ตาม design doc */
 function DiffBar({ added, removed, max }: { added: number; removed: number; max: number }) {
@@ -15,7 +14,7 @@ function DiffBar({ added, removed, max }: { added: number; removed: number; max:
   const a = Math.max(added > 0 ? 2 : 0, Math.round(added * scale))
   const r = Math.max(removed > 0 ? 2 : 0, Math.round(removed * scale))
   return (
-    <span className="inline-flex h-1.5 overflow-hidden rounded-[3px]" style={{ width: a + r }}>
+    <span className="inline-flex h-1.5 overflow-hidden rounded-chip" style={{ width: a + r }}>
       <span className="bg-pine" style={{ width: a }} />
       <span className="bg-danger" style={{ width: r }} />
     </span>
@@ -72,8 +71,7 @@ export function Summary({ id }: { id: string }) {
   if (!session || !workspace) {
     return (
       <Card>
-        <Header showWorkspace={false} />
-        <div className="px-5 py-8 text-[15px] text-faint">กำลังโหลดสรุป…</div>
+        <div className="px-5 py-8 text-base text-faint">กำลังโหลดสรุป…</div>
       </Card>
     )
   }
@@ -89,32 +87,23 @@ export function Summary({ id }: { id: string }) {
       <BackLink href={`/session/${id}`} label="กลับไป session" />
 
       <Card>
-        <Header
-          showWorkspace={false}
-          crumbs={[
-            { label: 'Defect', href: '/' },
-            { label: session.branch, href: `/session/${id}`, mono: true },
-            { label: 'สรุป' },
-          ]}
-        />
-
-        <div className="flex flex-col gap-2 border-b border-hair px-5 py-[18px]">
+        <div className="flex flex-col gap-2 border-b border-hair px-5 py-4">
           <div className="flex items-center gap-2.5">
             <span className="inline-flex items-center gap-1.5">
               <ColorDot color={workspace.color} />
               <span className="font-mono text-xs">{workspace.id}</span>
             </span>
             <span className="text-line">·</span>
-            <span className="font-mono text-[13px] font-medium">{session.branch}</span>
+            <span className="font-mono text-sm font-medium">{session.branch}</span>
           </div>
           <div className="flex gap-3.5">
-            <span className="font-mono text-[13px]">{files.length} ไฟล์เปลี่ยน</span>
-            <span className="font-mono text-[13px] text-pine">+{diff?.totalAdded ?? 0}</span>
-            <span className="font-mono text-[13px] text-danger">−{diff?.totalRemoved ?? 0}</span>
-            <span className="font-mono text-[13px] text-faint">· {commits.length} commit</span>
+            <span className="font-mono text-sm">{files.length} ไฟล์เปลี่ยน</span>
+            <span className="font-mono text-sm text-pine">+{diff?.totalAdded ?? 0}</span>
+            <span className="font-mono text-sm text-danger">−{diff?.totalRemoved ?? 0}</span>
+            <span className="font-mono text-sm text-faint">· {commits.length} commit</span>
           </div>
           {onExistingBranch && (
-            <span className="text-[13px] text-faint">
+            <span className="text-sm text-faint">
               แสดงเฉพาะการเปลี่ยนแปลงในรอบนี้ ไม่รวมงานที่มีอยู่บน branch นี้ก่อนหน้า
             </span>
           )}
@@ -129,10 +118,10 @@ export function Summary({ id }: { id: string }) {
               commits.map(c => (
                 <div key={c.hash} className="flex flex-col gap-1 border-t border-hair px-4 py-3 first:border-t-0">
                   <div className="flex items-baseline gap-3">
-                    <span className="font-mono text-[13px] font-medium text-muted">{c.hash.slice(0, 7)}</span>
+                    <span className="font-mono text-sm font-medium text-muted">{c.hash.slice(0, 7)}</span>
                     <span className="text-sm">{c.subject}</span>
                   </div>
-                  <span className="pl-[76px] font-mono text-xs text-faint">{c.fileCount} ไฟล์</span>
+                  <span className="pl-19 font-mono text-xs text-faint">{c.fileCount} ไฟล์</span>
                 </div>
               ))
             )}
@@ -147,9 +136,9 @@ export function Summary({ id }: { id: string }) {
             ) : (
               files.map(f => (
                 <div key={f.path} className="flex items-center gap-3.5 border-t border-hair px-4 py-2.5 first:border-t-0">
-                  <span className="flex-1 truncate font-mono text-[13px]">{f.path}</span>
-                  <span className="w-11 text-right font-mono text-[13px] text-pine">+{f.added}</span>
-                  <span className="w-9 text-right font-mono text-[13px] text-danger">−{f.removed}</span>
+                  <span className="flex-1 truncate font-mono text-sm">{f.path}</span>
+                  <span className="w-11 text-right font-mono text-sm text-pine">+{f.added}</span>
+                  <span className="w-9 text-right font-mono text-sm text-danger">−{f.removed}</span>
                   <DiffBar added={f.added} removed={f.removed} max={maxChange} />
                 </div>
               ))
@@ -157,7 +146,7 @@ export function Summary({ id }: { id: string }) {
           </div>
         </div>
 
-        {error && <div className="border-t border-hair px-5 py-3 text-[13px] text-danger">{error}</div>}
+        {error && <div className="border-t border-hair px-5 py-3 text-sm text-danger">{error}</div>}
 
         <div className="flex items-center gap-2.5 border-t border-hair bg-paper px-5 py-3.5">
           <Button disabled={busy} onClick={() => void act(() => api.sessions.openEditor(id))}>
@@ -174,7 +163,7 @@ export function Summary({ id }: { id: string }) {
 
       {confirmDiscard && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-9"
           onKeyDown={e => e.key === 'Escape' && setConfirmDiscard(false)}
         >
           <button
@@ -186,7 +175,7 @@ export function Summary({ id }: { id: string }) {
           <div
             role="dialog"
             aria-modal="true"
-            className="relative flex w-[480px] max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-[22px]"
+            className="relative flex w-120 max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-5"
           >
             <span className="text-base font-semibold">
               {onExistingBranch ? (
@@ -195,17 +184,17 @@ export function Summary({ id }: { id: string }) {
                 <>ทิ้ง branch <span className="font-mono text-sm">{session.branch}</span>?</>
               )}
             </span>
-            <span className="text-sm leading-[1.7] text-muted">
+            <span className="text-sm leading-relaxed text-muted">
               {onExistingBranch ? (
                 <>
-                  จะย้อน <span className="font-mono text-[13px]">{session.branch}</span> กลับไปที่{' '}
-                  <span className="font-mono text-[13px]">{session.baseCommit.slice(0, 7)}</span>{' '}
+                  จะย้อน <span className="font-mono text-sm">{session.branch}</span> กลับไปที่{' '}
+                  <span className="font-mono text-sm">{session.baseCommit.slice(0, 7)}</span>{' '}
                   ซึ่งเป็นจุดที่ session นี้เริ่ม — commit {commits.length} ตัวของรอบนี้
                   {commits.length > 0 && <> ({commits.map(c => c.hash.slice(0, 7)).join(', ')})</>}{' '}
                   กับไฟล์ที่ยังไม่ commit จะหายไป เอาคืนไม่ได้
                   <br />
                   <span className="text-ink">
-                    branch <span className="font-mono text-[13px]">{session.branch}</span> ไม่ถูกลบ
+                    branch <span className="font-mono text-sm">{session.branch}</span> ไม่ถูกลบ
                     และงานที่มีอยู่ก่อนหน้ายังอยู่ครบ
                   </span>
                 </>
@@ -216,18 +205,18 @@ export function Summary({ id }: { id: string }) {
                     <> ({commits.map(c => c.hash.slice(0, 7)).join(', ')})</>
                   )}{' '}
                   — working tree กลับไปที่{' '}
-                  <span className="font-mono text-[13px]">{workspace.baseBranch}</span> เอาคืนไม่ได้
+                  <span className="font-mono text-sm">{workspace.baseBranch}</span> เอาคืนไม่ได้
                 </>
               )}
             </span>
             <div className="mt-1 flex justify-end gap-2.5">
               <Button onClick={() => setConfirmDiscard(false)} disabled={busy}>ยกเลิก</Button>
-              <DangerButton
+              <Button variant="dangerSolid"
                 disabled={busy}
                 onClick={() => void act(() => api.sessions.discard(id), () => navigate('/'))}
               >
                 {onExistingBranch ? 'ยกเลิกการเปลี่ยนแปลง' : 'ทิ้ง branch'}
-              </DangerButton>
+              </Button>
             </div>
           </div>
         </div>

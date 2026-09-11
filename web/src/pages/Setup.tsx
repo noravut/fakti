@@ -1,6 +1,5 @@
 import { useLocation } from 'wouter'
 import { useStore } from '../store'
-import { Header } from '../components/Header'
 import { BackLink, useEscapeBack } from '../components/BackLink'
 import { WorkspaceForm } from '../components/WorkspaceForm'
 import { Card } from '../components/ui'
@@ -19,12 +18,10 @@ export function Setup() {
       {canLeave && <BackLink href="/" label="กลับไป Defect list" />}
 
       <Card>
-        <Header crumbs={[{ label: 'เพิ่ม repo' }]} showWorkspace={canLeave} />
-
-        <div className="flex flex-col gap-1.5 border-b border-hair px-5 py-[18px]">
-          <span className="text-[15px] font-semibold">เพิ่ม repo แรกก่อนเริ่ม</span>
-          <span className="text-[13px] text-muted">
-            pat ต้องรู้ว่าจะให้ Claude Code ไปแก้โค้ดที่ไหน — ชี้ไปที่โฟลเดอร์ git repo ในเครื่อง
+        <div className="flex flex-col gap-1.5 border-b border-hair px-5 py-4">
+          <span className="text-base font-semibold">เพิ่ม repo แรกก่อนเริ่ม</span>
+          <span className="text-sm text-muted">
+            fakti ต้องรู้ว่าจะให้ ผู้ช่วยเขียนโค้ด ไปแก้โค้ดที่ไหน — ชี้ไปที่โฟลเดอร์ git repo ในเครื่อง
           </span>
         </div>
 

@@ -2,43 +2,61 @@ import { useEffect, useRef } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import type { ClientMessage, DiffStat, ServerMessage, SessionState } from '@shared/types'
+import { useStore } from '../store'
+import type { ClientMessage, DiffStat, ServerMessage, SessionAgent, SessionState } from '@shared/types'
+import { AGENT_LABELS } from '@shared/types'
 
 interface Props {
   sessionId: string
+  agent: SessionAgent
   onState: (state: SessionState) => void
   onDiff: (stat: DiffStat) => void
   onExit: (code: number) => void
   onDisconnect: (reason: 'gone' | 'error') => void
 }
 
-/** ตรงกับ palette ของ terminal ใน design doc */
-const THEME = {
-  background: '#16171B',
-  foreground: '#D6D8DC',
-  cursor: '#7CBFA5',
-  cursorAccent: '#16171B',
-  selectionBackground: '#8FBFE855',
-  black: '#16171B',
-  red: '#D9756B',
-  green: '#7CBFA5',
-  yellow: '#D9A44A',
-  blue: '#8FBFE8',
-  magenta: '#B99BE0',
-  cyan: '#7FC7C7',
-  white: '#D6D8DC',
-  brightBlack: '#8E939C',
-  brightRed: '#E58C82',
-  brightGreen: '#93D3B8',
-  brightYellow: '#E8BC6B',
-  brightBlue: '#A8CFF0',
-  brightMagenta: '#CBB2EC',
-  brightCyan: '#9AD6D6',
-  brightWhite: '#FAFAF9',
+/**
+ * xterm รับได้แค่ค่าสีจริง ไม่รับ var() — อ่าน token จาก <html> ตอนประกอบธีม
+ * จะได้ไม่ต้องก๊อป hex มาไว้สองที่แล้วลืมแก้ตามกันเวลา token เปลี่ยน
+ */
+function buildTheme() {
+  const css = getComputedStyle(document.documentElement)
+  const v = (name: string) => css.getPropertyValue(name).trim()
+  const bg = v('--term-bg')
+  const fg = v('--term-fg')
+  const dim = v('--term-dim')
+  const ok = v('--term-ok')
+  const ask = v('--term-ask')
+  const user = v('--term-user')
+  return {
+    background: bg,
+    foreground: fg,
+    cursor: ok,
+    cursorAccent: bg,
+    selectionBackground: `${user}55`,
+    black: bg,
+    red: v('--danger'),
+    green: ok,
+    yellow: ask,
+    blue: user,
+    magenta: '#B99BE0',
+    cyan: '#7FC7C7',
+    white: fg,
+    brightBlack: dim,
+    brightRed: '#E58C82',
+    brightGreen: '#93D3B8',
+    brightYellow: '#E8BC6B',
+    brightBlue: '#A8CFF0',
+    brightMagenta: '#CBB2EC',
+    brightCyan: '#9AD6D6',
+    brightWhite: '#FAFAF9',
+  }
 }
 
-export function Terminal({ sessionId, onState, onDiff, onExit, onDisconnect }: Props) {
+export function Terminal({ sessionId, agent, onState, onDiff, onExit, onDisconnect }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const termRef = useRef<XTerm | null>(null)
+  const theme = useStore(s => s.theme)
   // handler ล่าสุดโดยไม่ต้อง re-run effect (จะทำให้ pty หลุดการเชื่อมต่อ)
   const handlers = useRef({ onState, onDiff, onExit, onDisconnect })
   handlers.current = { onState, onDiff, onExit, onDisconnect }
@@ -51,9 +69,9 @@ export function Terminal({ sessionId, onState, onDiff, onExit, onDisconnect }: P
     const term = new XTerm({
       // ต้องมีฟอนต์ไทยต่อท้าย ไม่งั้น prompt ภาษาไทยที่ส่งเข้า pty โผล่มาเป็นกล่องเปล่า
       fontFamily: "'JetBrains Mono', 'IBM Plex Sans Thai', ui-monospace, monospace",
-      fontSize: 13,
-      lineHeight: 1.35,
-      theme: THEME,
+      fontSize: 14,
+      lineHeight: 1.4,
+      theme: buildTheme(),
       cursorBlink: !reduced,
       scrollback: 10000,
       convertEol: false,
@@ -61,6 +79,7 @@ export function Terminal({ sessionId, onState, onDiff, onExit, onDisconnect }: P
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(host)
+    termRef.current = term
     fit.fit()
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
@@ -85,7 +104,7 @@ export function Terminal({ sessionId, onState, onDiff, onExit, onDisconnect }: P
       else if (msg.type === 'state') handlers.current.onState(msg.state)
       else if (msg.type === 'diff') handlers.current.onDiff(msg.stat)
       else if (msg.type === 'exit') {
-        term.write(`\r\n\x1b[90m— claude ปิดไปแล้ว (exit ${msg.code}) —\x1b[0m\r\n`)
+        term.write(`\r\n\x1b[90m— ${AGENT_LABELS[agent]} ปิดไปแล้ว (exit ${msg.code}) —\x1b[0m\r\n`)
         handlers.current.onExit(msg.code)
       }
     }
@@ -115,8 +134,14 @@ export function Terminal({ sessionId, onState, onDiff, onExit, onDisconnect }: P
       ws.onclose = null
       ws.close(1000)
       term.dispose()
+      termRef.current = null
     }
-  }, [sessionId])
+  }, [sessionId, agent])
 
-  return <div ref={hostRef} className="h-[420px] w-full bg-term-bg px-2 py-2" />
+  // สลับธีมต้องไม่สร้าง terminal ใหม่ ไม่งั้น pty หลุดและประวัติที่พิมพ์ไว้หาย
+  useEffect(() => {
+    if (termRef.current) termRef.current.options.theme = buildTheme()
+  }, [theme])
+
+  return <div ref={hostRef} className="h-terminal w-full bg-term-bg px-2 py-2" />
 }

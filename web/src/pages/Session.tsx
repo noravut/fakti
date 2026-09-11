@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Check, Loader, MoreHorizontal } from 'lucide-react'
 import { useLocation } from 'wouter'
 import type { DiffStat, Session as SessionRecord, SessionState } from '@shared/types'
+import { AGENT_LABELS } from '@shared/types'
 import { ApiError, api } from '../api'
 import { useStore } from '../store'
 import { useGoHomeWithMessage } from '../components/GoHome'
 import { Terminal } from '../components/Terminal'
-import { Header } from '../components/Header'
 import { BackLink } from '../components/BackLink'
 import { ColorDot } from '../components/WorkspaceChip'
-import { Button, Card, DangerButton, ErrorBox, Input } from '../components/ui'
+import { Button, Card, ErrorBox, Input, StatusBadge } from '../components/ui'
 
-const STATE_STYLE: Record<SessionState, { label: string; color: string; dot: string; pulse: boolean; bold: boolean }> = {
-  working: { label: 'กำลังทำงาน', color: '#A66A0F', dot: '#A66A0F', pulse: true, bold: false },
-  waiting: { label: 'รอคุณตอบ', color: '#7A4E0B', dot: '#7A4E0B', pulse: false, bold: true },
-  idle: { label: 'พร้อมรับคำสั่ง', color: '#5C6068', dot: '#8E939C', pulse: false, bold: false },
-  closed: { label: 'จบแล้ว', color: '#1F5F52', dot: '#1F5F52', pulse: false, bold: false },
+/** สีมาจาก token ใน StatusBadge — ที่นี่เก็บแค่คำ */
+const STATE_LABEL: Record<SessionState, string> = {
+  working: 'กำลังทำงาน',
+  waiting: 'รอคุณตอบ',
+  idle: 'พร้อมรับคำสั่ง',
+  closed: 'จบแล้ว',
 }
 
 export function Session({ id }: { id: string }) {
@@ -86,25 +88,35 @@ export function Session({ id }: { id: string }) {
 
   // สถานะ "รอคุณตอบ" ต้องเห็นได้จาก tab อื่น
   useEffect(() => {
-    document.title = state === 'waiting' ? '● รอคุณตอบ — Defect fixer' : 'Defect fixer'
+    document.title = state === 'waiting' ? '● รอคุณตอบ — fakti' : 'fakti'
     return () => {
-      document.title = 'Defect fixer'
+      document.title = 'fakti'
     }
   }, [state])
 
-  /** defect ไหนมี commit อ้างถึงแล้ว ถือว่าแก้เสร็จ — ที่เหลือเดาจากลำดับ */
-  const defectStatus = useMemo(() => {
+  const isFeature = session?.kind === 'feature'
+
+  /** แถวงานใต้ header — feature โชว์ REQ แทน defect ใช้โครงเดียวกัน */
+  const items = useMemo(
+    () => session?.feature
+      ? session.feature.requirements.map(r => ({ id: r.key, key: r.key, title: r.text }))
+      : session?.defects ?? [],
+    [session],
+  )
+
+  /** รายการไหนมี commit อ้างถึงรหัสแล้ว ถือว่าเสร็จ — ที่เหลือเดาจากลำดับ */
+  const itemStatus = useMemo(() => {
     const subjects = (diff?.commits ?? []).map(c => c.subject).join('\n')
-    const done = new Set(
-      (session?.defects ?? []).filter(d => subjects.includes(d.key)).map(d => d.id),
-    )
-    const nextUp = (session?.defects ?? []).find(d => !done.has(d.id))
-    return (defectId: string) => {
-      if (done.has(defectId)) return { label: '✓ แก้แล้ว', color: '#1F5F52' }
-      if (state === 'working' && nextUp?.id === defectId) return { label: '⟳ กำลังแก้', color: '#A66A0F' }
-      return { label: '○ รออยู่', color: '#8E939C' }
+    const done = new Set(items.filter(d => subjects.includes(d.key)).map(d => d.id))
+    const nextUp = items.find(d => !done.has(d.id))
+    return (itemId: string) => {
+      if (done.has(itemId)) return { label: isFeature ? 'ทำแล้ว' : 'แก้แล้ว', tone: 'done' } as const
+      if (state === 'working' && nextUp?.id === itemId) {
+        return { label: isFeature ? 'กำลังทำ' : 'กำลังแก้', tone: 'doing' } as const
+      }
+      return { label: 'รออยู่', tone: 'todo' } as const
     }
-  }, [diff, session, state])
+  }, [items, isFeature, diff, state])
 
   async function doRename() {
     await act(
@@ -156,13 +168,13 @@ export function Session({ id }: { id: string }) {
   if (!session || !workspace) {
     return (
       <Card>
-        <Header showWorkspace={false} />
-        <div className="px-5 py-8 text-[15px] text-faint">กำลังเปิด session…</div>
+        <div className="px-5 py-8 text-base text-faint">กำลังเปิด session…</div>
       </Card>
     )
   }
 
-  const style = STATE_STYLE[state]
+  const agentLabel = AGENT_LABELS[session.agent]
+
   // branch ของผู้ใช้เอง fakti ไม่มีสิทธิ์เปลี่ยนชื่อหรือลบ
   const ownsBranch = session.branchOwnership === 'created'
   const renameValid = /^[a-zA-Z0-9._/-]+$/.test(renameTo) && !renameTo.startsWith('-')
@@ -174,35 +186,19 @@ export function Session({ id }: { id: string }) {
       <BackLink href="/" label="ย่อเก็บ" />
 
       <Card>
-        <Header
-          showWorkspace={false}
-          crumbs={[
-            { label: 'Defect', href: '/' },
-            { label: session.branch, mono: true },
-          ]}
-        />
-
-        <div className="flex h-[52px] items-center justify-between border-b border-hair px-5">
+        <div className="flex h-13 items-center justify-between border-b border-hair px-5">
           <div className="flex items-center gap-2.5">
             <span className="inline-flex items-center gap-1.5">
               <ColorDot color={workspace.color} />
               <span className="font-mono text-xs">{workspace.id}</span>
             </span>
             <span className="text-line">·</span>
-            <span className="font-mono text-[13px] font-medium">{session.branch}</span>
+            <span className="font-mono text-sm font-medium">{session.branch}</span>
+            <span className="text-sm text-faint">{agentLabel}</span>
           </div>
 
           <div className="flex items-center gap-4">
-            <span
-              className={`inline-flex items-center gap-[7px] text-[13px] ${style.bold ? 'font-semibold' : 'font-medium'}`}
-              style={{ color: style.color }}
-            >
-              <span
-                className={`h-2 w-2 rounded-full ${style.pulse ? 'pat-pulse' : ''}`}
-                style={{ background: style.dot }}
-              />
-              {style.label}
-            </span>
+            <StatusBadge tone={state}>{STATE_LABEL[state]}</StatusBadge>
 
             <div ref={menuRef} className="relative">
               <button
@@ -210,12 +206,12 @@ export function Session({ id }: { id: string }) {
                 aria-label="เมนู session"
                 aria-expanded={menuOpen}
                 onClick={() => setMenuOpen(o => !o)}
-                className="rounded border border-line bg-paper px-2 py-1 text-[13px] text-muted hover:text-ink"
+                className="inline-flex h-7 w-7 items-center justify-center rounded border border-line bg-paper text-muted transition-colors hover:text-ink"
               >
-                ⋯
+                <MoreHorizontal aria-hidden size={18} />
               </button>
               {menuOpen && (
-                <div className="absolute right-0 top-9 z-20 w-[240px] overflow-hidden rounded-card border border-line bg-paper shadow-sm">
+                <div className="absolute right-0 top-9 z-20 w-60 overflow-hidden rounded-card border border-line bg-paper shadow-sm">
                   {ownsBranch && (
                     <>
                       <button
@@ -225,7 +221,7 @@ export function Session({ id }: { id: string }) {
                           setRenameTo(session.branch)
                           setRenaming(true)
                         }}
-                        className="w-full px-4 py-2.5 text-left text-[13px] hover:bg-hairline"
+                        className="w-full px-4 py-2.5 text-left text-sm hover:bg-hairline"
                       >
                         เปลี่ยนชื่อ branch
                       </button>
@@ -235,7 +231,7 @@ export function Session({ id }: { id: string }) {
                           setMenuOpen(false)
                           setConfirmDelete(true)
                         }}
-                        className="w-full border-t border-hair px-4 py-2.5 text-left text-[13px] text-danger hover:bg-danger/5"
+                        className="w-full border-t border-hair px-4 py-2.5 text-left text-sm text-danger hover:bg-danger-soft"
                       >
                         ลบ branch นี้
                       </button>
@@ -248,15 +244,15 @@ export function Session({ id }: { id: string }) {
                       setMenuOpen(false)
                       setConfirmClose(true)
                     }}
-                    className="w-full border-t border-hair px-4 py-2.5 text-left text-[13px] text-danger hover:bg-danger/5 disabled:cursor-not-allowed disabled:text-faint"
+                    className="w-full border-t border-hair px-4 py-2.5 text-left text-sm text-danger hover:bg-danger-soft disabled:cursor-not-allowed disabled:text-faint"
                   >
                     ปิด session นี้
                   </button>
-                  <div className="border-t border-hair px-4 py-2 text-[11px] text-faint">
+                  <div className="border-t border-hair px-4 py-2 text-xs text-faint">
                     {!ownsBranch
                       ? `${session.branch} เป็น branch ของคุณเอง fakti ไม่แตะชื่อหรือลบให้`
                       : session.live
-                        ? 'ปิด session = หยุด claude จริงๆ แต่ branch กับงานที่ทำไว้ยังอยู่'
+                        ? `ปิด session = หยุด ${agentLabel} จริงๆ แต่ branch กับงานที่ทำไว้ยังอยู่`
                         : 'session นี้ปิดไปแล้ว'}
                   </div>
                 </div>
@@ -266,13 +262,22 @@ export function Session({ id }: { id: string }) {
         </div>
 
         <div className="border-b border-hair">
-          {session.defects.map(d => {
-            const status = defectStatus(d.id)
+          {items.map(d => {
+            const status = itemStatus(d.id)
             return (
-              <div key={d.id} className="flex items-center gap-3 border-t border-hairline px-5 py-[9px] first:border-t-0">
-                <span className="font-mono text-[13px] font-medium">{d.key}</span>
+              <div key={d.id} className="flex items-center gap-3 border-t border-hairline px-5 py-2 first:border-t-0">
+                <span className="font-mono text-sm font-medium">{d.key}</span>
                 <span className="flex-1 truncate text-sm">{d.title}</span>
-                <span className="text-[13px]" style={{ color: status.color }}>{status.label}</span>
+                <span
+                  className={
+                    'inline-flex shrink-0 items-center gap-1.5 text-sm ' +
+                    (status.tone === 'done' ? 'text-ok' : status.tone === 'doing' ? 'text-warn' : 'text-faint')
+                  }
+                >
+                  {status.tone === 'done' && <Check aria-hidden size={14} strokeWidth={2.25} />}
+                  {status.tone === 'doing' && <Loader aria-hidden size={14} className="pat-pulse" />}
+                  {status.label}
+                </span>
               </div>
             )
           })}
@@ -281,6 +286,7 @@ export function Session({ id }: { id: string }) {
         {session.live ? (
           <Terminal
             sessionId={id}
+            agent={session.agent}
             onState={setState}
             onDiff={setDiff}
             onExit={() => setState('closed')}
@@ -288,7 +294,7 @@ export function Session({ id }: { id: string }) {
           />
         ) : (
           <div className="flex flex-col items-center gap-3 bg-term-bg px-6 py-12 text-center">
-            <span className="font-mono text-[13px] text-term-dim">
+            <span className="font-mono text-sm text-term-dim">
               session นี้ปิดไปแล้ว — branch {session.branch} ยังอยู่ครบ
             </span>
             <Button
@@ -301,19 +307,23 @@ export function Session({ id }: { id: string }) {
           </div>
         )}
 
-        {error && <div className="border-t border-hair px-5 py-3 text-[13px] text-danger">{error}</div>}
+        {error && <div className="border-t border-hair px-5 py-3 text-sm text-danger">{error}</div>}
 
         <div className="flex items-center gap-4 border-t border-hair bg-paper px-5 py-3">
-          <span className="font-mono text-[13px]">{diff?.files.length ?? 0} ไฟล์เปลี่ยน</span>
-          <span className="font-mono text-[13px] text-pine">+{diff?.totalAdded ?? 0}</span>
-          <span className="font-mono text-[13px] text-danger">−{diff?.totalRemoved ?? 0}</span>
+          <span className="font-mono text-sm">{diff?.files.length ?? 0} ไฟล์เปลี่ยน</span>
+          <span className="font-mono text-sm text-pine">+{diff?.totalAdded ?? 0}</span>
+          <span className="font-mono text-sm text-danger">−{diff?.totalRemoved ?? 0}</span>
           <span className="flex-1" />
           <Button
             disabled={busy || !session.live}
-            title={session.live ? 'ส่ง prompt QA Gate ให้ claude ทวนงานที่แก้' : 'session ปิดไปแล้ว'}
+            title={
+              !session.live ? 'session ปิดไปแล้ว'
+                : isFeature ? `ส่ง prompt ให้ ${agentLabel} สวมบท QA ตรวจว่าครบทุก REQ`
+                  : `ส่ง prompt QA Gate ให้ ${agentLabel} ทวนงานที่แก้`
+            }
             onClick={() => void openQa()}
           >
-            ตรวจ QA
+            {isFeature ? 'ทวน requirement' : 'ตรวจ QA'}
           </Button>
           <Button disabled={busy} onClick={() => void act(() => api.sessions.openEditor(id))}>
             เปิดใน VSCode
@@ -323,7 +333,7 @@ export function Session({ id }: { id: string }) {
       </Card>
 
       {qaOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-9">
           <button
             type="button"
             aria-label="ปิดหน้าต่าง"
@@ -333,16 +343,20 @@ export function Session({ id }: { id: string }) {
           <div
             role="dialog"
             aria-modal="true"
-            className="relative flex max-h-full w-[760px] max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-[22px]"
+            className="relative flex max-h-full w-190 max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-5"
           >
-            <span className="text-base font-semibold">ตรวจ QA ก่อนส่งมอบ</span>
-            <span className="text-[13px] text-muted">
-              fakti เติมชื่อ defect กับไฟล์ที่เปลี่ยนจาก git ให้แล้ว ส่วนที่เหลือ claude จะสรุปเองจาก
-              บทสนทนาที่ทำมา — อ่านและแก้ได้ทุกบรรทัดก่อนส่ง
+            <span className="text-base font-semibold">
+              {isFeature ? 'ทวน requirement ก่อนส่งมอบ' : 'ตรวจ QA ก่อนส่งมอบ'}
+            </span>
+            <span className="text-sm text-muted">
+              {isFeature
+                ? `fakti เติมชื่อ feature ทุก REQ และไฟล์ที่เปลี่ยนจาก git ให้แล้ว ${agentLabel} จะสวมบท QA ตัดสินทีละข้อว่าครบตามที่เขียนไหม`
+                : `fakti เติมชื่อ defect กับไฟล์ที่เปลี่ยนจาก git ให้แล้ว ส่วนที่เหลือ ${agentLabel} จะสรุปเองจากบทสนทนาที่ทำมา`}
+              {' '}— อ่านและแก้ได้ทุกบรรทัดก่อนส่ง
             </span>
             {state === 'working' && (
-              <span className="text-[13px] text-warn-deep">
-                claude ยังทำงานอยู่ — ส่งตอนนี้ข้อความจะเข้าคิวรอจนงานปัจจุบันจบ
+              <span className="text-sm text-warn">
+                {agentLabel} ยังทำงานอยู่ — คำสั่งนี้จะถูกส่งเข้า terminal ที่กำลังใช้งาน
               </span>
             )}
             <textarea
@@ -350,7 +364,7 @@ export function Session({ id }: { id: string }) {
               disabled={qaLoading}
               spellCheck={false}
               onChange={e => setQaText(e.target.value)}
-              className="min-h-[50vh] w-full resize-y rounded border border-line bg-paper px-3 py-2 font-mono text-[13px] leading-[1.6] text-ink disabled:text-faint"
+              className="min-h-terminal w-full resize-y rounded border border-line bg-paper px-3 py-2 font-mono text-sm leading-relaxed text-ink disabled:text-faint"
               placeholder={qaLoading ? 'กำลังเตรียม prompt…' : ''}
             />
             <div className="mt-1 flex justify-end gap-2.5">
@@ -368,7 +382,7 @@ export function Session({ id }: { id: string }) {
       )}
 
       {renaming && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-9">
           <button
             type="button"
             aria-label="ปิดหน้าต่าง"
@@ -378,11 +392,11 @@ export function Session({ id }: { id: string }) {
           <div
             role="dialog"
             aria-modal="true"
-            className="relative flex w-[480px] max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-[22px]"
+            className="relative flex w-120 max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-5"
           >
             <span className="text-base font-semibold">เปลี่ยนชื่อ branch</span>
             <div className="flex flex-col gap-1.5">
-              <span className="text-[13px] text-faint">
+              <span className="text-sm text-faint">
                 ชื่อเดิม <span className="font-mono">{session.branch}</span>
               </span>
               <Input
@@ -395,9 +409,9 @@ export function Session({ id }: { id: string }) {
                 }}
               />
               {!renameValid && renameTo !== '' && (
-                <span className="text-[13px] text-danger">ใช้ได้แค่ a-z 0-9 . _ / -</span>
+                <span className="text-sm text-danger">ใช้ได้แค่ a-z 0-9 . _ / -</span>
               )}
-              {renameTaken && <span className="text-[13px] text-danger">มี branch ชื่อนี้อยู่แล้ว</span>}
+              {renameTaken && <span className="text-sm text-danger">มี branch ชื่อนี้อยู่แล้ว</span>}
             </div>
             <div className="mt-1 flex justify-end gap-2.5">
               <Button onClick={() => setRenaming(false)} disabled={busy}>ยกเลิก</Button>
@@ -414,7 +428,7 @@ export function Session({ id }: { id: string }) {
       )}
 
       {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-9">
           <button
             type="button"
             aria-label="ปิดหน้าต่าง"
@@ -424,32 +438,32 @@ export function Session({ id }: { id: string }) {
           <div
             role="dialog"
             aria-modal="true"
-            className="relative flex w-[480px] max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-[22px]"
+            className="relative flex w-120 max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-5"
           >
             <span className="text-base font-semibold">
               ลบ branch <span className="font-mono text-sm">{session.branch}</span>?
             </span>
-            <span className="text-sm leading-[1.7] text-muted">
-              claude จะถูกหยุด แล้วลบ branch นี้ทิ้งพร้อม commit
+            <span className="text-sm leading-relaxed text-muted">
+              {agentLabel} จะถูกหยุด แล้วลบ branch นี้ทิ้งพร้อม commit
               {(diff?.commits.length ?? 0) > 0 && <> {diff?.commits.length} ตัว</>}{' '}
               และไฟล์ที่ยังไม่ commit — working tree กลับไปที่{' '}
-              <span className="font-mono text-[13px]">{workspace.baseBranch}</span> เอาคืนไม่ได้
+              <span className="font-mono text-sm">{workspace.baseBranch}</span> เอาคืนไม่ได้
             </span>
             <div className="mt-1 flex justify-end gap-2.5">
               <Button onClick={() => setConfirmDelete(false)} disabled={busy}>ยกเลิก</Button>
-              <DangerButton
+              <Button variant="dangerSolid"
                 disabled={busy}
                 onClick={() => void act(() => api.sessions.discard(id), () => navigate('/'))}
               >
                 ลบ branch
-              </DangerButton>
+              </Button>
             </div>
           </div>
         </div>
       )}
 
       {confirmClose && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-9">
           <button
             type="button"
             aria-label="ปิดหน้าต่าง"
@@ -459,20 +473,20 @@ export function Session({ id }: { id: string }) {
           <div
             role="dialog"
             aria-modal="true"
-            className="relative flex w-[480px] max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-[22px]"
+            className="relative flex w-120 max-w-full flex-col gap-3 rounded-card border border-line bg-paper p-5"
           >
             <span className="text-base font-semibold">
               ปิด session บน <span className="font-mono text-sm">{session.branch}</span>?
             </span>
-            <span className="text-sm leading-[1.7] text-muted">
-              claude จะถูกหยุดจริงๆ บทสนทนาที่ค้างอยู่หายไป — แต่ branch,
+            <span className="text-sm leading-relaxed text-muted">
+              {agentLabel} จะถูกหยุดจริงๆ บทสนทนาที่ค้างอยู่หายไป — แต่ branch,
               commit และไฟล์ที่แก้ไปแล้วยังอยู่ครบ เปิด session ใหม่บน branch เดิมได้ทีหลัง
               <br />
               <span className="text-faint">ถ้าแค่อยากไปทำอย่างอื่นก่อน กด "ย่อเก็บ" มุมซ้ายบนพอ</span>
             </span>
             <div className="mt-1 flex justify-end gap-2.5">
               <Button onClick={() => setConfirmClose(false)} disabled={busy}>ยกเลิก</Button>
-              <DangerButton
+              <Button variant="dangerSolid"
                 disabled={busy}
                 onClick={() => void act(
                   () => api.sessions.close(id),
@@ -483,7 +497,7 @@ export function Session({ id }: { id: string }) {
                 )}
               >
                 ปิด session
-              </DangerButton>
+              </Button>
             </div>
           </div>
         </div>

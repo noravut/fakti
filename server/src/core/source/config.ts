@@ -60,6 +60,7 @@ const sourceSchema = z.object({
     status: z.string().optional(),
     reporter: z.string().optional(),
     assignee: z.string().optional(),
+    tags: z.string().optional(),
     createdAt: z.string().optional(),
   }),
   titleCleanup: z.string().optional(),

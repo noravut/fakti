@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { BranchChoice, BranchInfo, Defect, DirtyStrategy, Session, Workspace } from '@shared/types'
+import type {
+  BranchChoice, BranchInfo, Defect, DirtyStrategy, FeatureSpec, Session, SessionAgent, Workspace,
+} from '@shared/types'
+import { AGENT_LABELS, SESSION_AGENTS } from '@shared/types'
 import { ApiError, api } from '../api'
-import { relativeTime, suggestBranch } from '../format'
+import { relativeTime, suggestBranch, suggestFeatureBranch } from '../format'
 import { Button, Input } from './ui'
 import { WorkspaceChip } from './WorkspaceChip'
 
@@ -13,6 +16,7 @@ type Mode = BranchChoice['kind'] | 'append'
 
 export interface ConfirmPayload {
   mode: 'new' | 'append'
+  agent?: SessionAgent
   branch: BranchChoice
   sessionId?: string
   dirtyStrategy?: DirtyStrategy
@@ -21,7 +25,10 @@ export interface ConfirmPayload {
 }
 
 interface Props {
+  /** defect จาก tracker — feature session ส่ง [] มา */
   defects: Defect[]
+  /** มีค่า = เริ่ม feature session แทนการแก้ defect */
+  feature?: FeatureSpec
   workspace: Workspace
   /** session ที่ยังเปิดอยู่บน workspace นี้ — ให้เลือก "ต่อใน session ที่เปิดอยู่" ได้ */
   openSessions: Session[]
@@ -32,16 +39,17 @@ interface Props {
 }
 
 export function ConfirmDialog({
-  defects, workspace, openSessions, dirtyCount, onCancel, onSubmit,
+  defects, feature, workspace, openSessions, dirtyCount, onCancel, onSubmit,
 }: Props) {
   const [mode, setMode] = useState<Mode>('new')
+  const [agent, setAgent] = useState<SessionAgent>('claude')
   const [sessionId, setSessionId] = useState(openSessions[0]?.id ?? '')
   const [dirty, setDirty] = useState(dirtyCount)
   const [dirtyStrategy, setDirtyStrategy] = useState<DirtyStrategy | undefined>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [name, setName] = useState(() => suggestBranch(defects))
+  const [name, setName] = useState(() => (feature ? suggestFeatureBranch(feature.title) : suggestBranch(defects)))
   const [from, setFrom] = useState(workspace.baseBranch)
   const [existing, setExisting] = useState('')
   const [search, setSearch] = useState('')
@@ -74,7 +82,7 @@ export function ConfirmDialog({
 
   useEffect(() => {
     let cancelled = false
-    void api.sessions.previewPrompt(workspace.id, defects.map(d => d.id))
+    void api.sessions.previewPrompt(workspace.id, defects.map(d => d.id), feature)
       .then(res => {
         if (!cancelled) setPrompt(res.prompt)
       })
@@ -136,6 +144,12 @@ export function ConfirmDialog({
   const canUseCurrent = Boolean(current) && !onProtected
   const canAppend = openSessions.length > 0
 
+  // รายการที่โชว์ใต้หัว dialog — feature ใช้ REQ แทน defect
+  const items = feature
+    ? feature.requirements.map(r => ({ id: r.key, key: r.key, title: r.text }))
+    : defects
+  const heading = feature ? `เริ่มทำ ${feature.title}` : `เริ่มแก้ ${defects.length} รายการ`
+
   const ready =
     mode === 'append' ? sessionId !== ''
       : mode === 'existing' ? existing !== ''
@@ -164,7 +178,7 @@ export function ConfirmDialog({
       await onSubmit(
         mode === 'append'
           ? { mode: 'append', branch: choice(), sessionId }
-          : { mode: 'new', branch: choice(), dirtyStrategy, prompt: prompt.trim() ? prompt : undefined },
+          : { mode: 'new', agent, branch: choice(), dirtyStrategy, prompt: prompt.trim() ? prompt : undefined },
       )
     } catch (err) {
       const conflict = err instanceof ApiError ? err.dirty : null
@@ -181,60 +195,75 @@ export function ConfirmDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 p-9">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-9">
       <button type="button" aria-label="ปิด" className="absolute inset-0 cursor-default" onClick={onCancel} />
 
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label={`เริ่มแก้ ${defects.length} รายการ`}
+        aria-label={heading}
         onKeyDown={e => {
           const tag = (e.target as HTMLElement).tagName
           if (e.key === 'Enter' && !e.shiftKey && tag !== 'SELECT' && tag !== 'TEXTAREA') {
             void submit()
           }
         }}
-        className="relative flex max-h-full w-full max-w-[560px] flex-col gap-4 overflow-y-auto rounded-card border border-line bg-paper p-6"
+        className="relative flex max-h-full w-full max-w-140 flex-col gap-4 overflow-y-auto rounded-card border border-line bg-paper p-6"
       >
         {mode !== 'append' && dirty > 0 && (
-          <div className="flex min-w-0 flex-col gap-2.5 rounded border border-warn/40 bg-warn/10 px-3.5 py-3">
-            <span className="inline-flex items-center gap-[7px] text-sm text-warn-deep">
+          <div className="flex min-w-0 flex-col gap-2.5 rounded border border-warn-line bg-warn-soft px-3.5 py-3">
+            <span className="inline-flex items-center gap-2 text-sm text-warn">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warn" />
               working tree มีไฟล์ค้าง {dirty} ไฟล์ — เลือกก่อนเริ่ม
             </span>
             <div className="flex flex-wrap gap-2.5">
               <Button
                 size="sm"
-                variant={dirtyStrategy === 'stash' ? 'primary' : 'warn'}
+                variant={dirtyStrategy === 'stash' ? 'primary' : 'secondary'}
                 onClick={() => setDirtyStrategy('stash')}
               >
                 stash ให้
               </Button>
               <Button
                 size="sm"
-                variant={dirtyStrategy === 'keep' ? 'primary' : 'default'}
+                variant={dirtyStrategy === 'keep' ? 'primary' : 'secondary'}
                 onClick={() => setDirtyStrategy('keep')}
               >
                 เอาไฟล์ค้างไปด้วย
               </Button>
             </div>
             {dirtyStrategy === 'keep' && (
-              <span className="text-[13px] text-muted">
+              <span className="text-sm text-muted">
                 ไฟล์ที่ยังไม่ commit จะติดไปกับ branch ที่เลือกด้านล่าง
               </span>
             )}
           </div>
         )}
 
-        <span className="text-base font-semibold">เริ่มแก้ {defects.length} รายการ</span>
+        <span className="text-base font-semibold">{heading}</span>
 
         <div className="flex min-w-0 items-center gap-2">
           <WorkspaceChip workspace={workspace} />
           <span className="truncate font-mono text-xs text-faint">· {workspace.path}</span>
         </div>
 
-        {branchError && <span className="text-[13px] text-danger">{branchError}</span>}
+        {branchError && <span className="text-sm text-danger">{branchError}</span>}
+
+        {mode !== 'append' && (
+          <label className="flex flex-col gap-1.5 text-sm">
+            ผู้ช่วยเขียนโค้ด
+            <select
+              value={agent}
+              onChange={e => setAgent(e.target.value as SessionAgent)}
+              disabled={busy}
+              className="rounded border border-line bg-paper px-2.5 py-1.5"
+            >
+              {SESSION_AGENTS.map(value => <option key={value} value={value}>{AGENT_LABELS[value]}</option>)}
+            </select>
+            <span className="text-faint">ต้องติดตั้ง {AGENT_LABELS[agent]} และล็อกอินบนเครื่องนี้ก่อน</span>
+          </label>
+        )}
 
         <div className="flex min-w-0 flex-col gap-1.5">
           <Option
@@ -244,7 +273,7 @@ export function ConfirmDialog({
             label="สร้าง branch ใหม่"
           >
             <div className="flex min-w-0 items-center gap-2.5">
-              <span className="w-14 shrink-0 text-[13px] text-faint">ชื่อ</span>
+              <span className="w-14 shrink-0 text-sm text-faint">ชื่อ</span>
               <Input
                 ref={nameRef}
                 value={name}
@@ -255,11 +284,11 @@ export function ConfirmDialog({
               />
             </div>
             {!nameValid && name !== '' && (
-              <span className="text-[13px] text-danger">ใช้ได้แค่ a-z 0-9 . _ / -</span>
+              <span className="text-sm text-danger">ใช้ได้แค่ a-z 0-9 . _ / -</span>
             )}
             {duplicate && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[13px] text-danger">มี branch นี้อยู่แล้ว</span>
+                <span className="text-sm text-danger">มี branch นี้อยู่แล้ว</span>
                 {canUseExisting && (
                   <button
                     type="button"
@@ -268,7 +297,7 @@ export function ConfirmDialog({
                       setExisting(name)
                       setSearch('')
                     }}
-                    className="text-[13px] text-pine underline hover:text-pine-deep"
+                    className="text-sm text-pine underline hover:text-pine-btn-hover"
                   >
                     ใช้ branch ที่มีอยู่แล้วแทน
                   </button>
@@ -276,11 +305,11 @@ export function ConfirmDialog({
               </div>
             )}
             <div className="flex min-w-0 items-center gap-2.5">
-              <span className="w-14 shrink-0 text-[13px] text-faint">แตกจาก</span>
+              <span className="w-14 shrink-0 text-sm text-faint">แตกจาก</span>
               <select
                 value={from}
                 onChange={e => setFrom(e.target.value)}
-                className="w-full min-w-0 flex-1 rounded border border-line bg-paper px-2.5 py-1.5 font-mono text-[13px]"
+                className="w-full min-w-0 flex-1 rounded border border-line bg-paper px-2.5 py-1.5 font-mono text-sm"
               >
                 {branches.length === 0 && <option value={workspace.baseBranch}>{workspace.baseBranch}</option>}
                 {branches.map(b => (
@@ -312,7 +341,7 @@ export function ConfirmDialog({
             <select
               value={existing}
               onChange={e => setExisting(e.target.value)}
-              className="w-full min-w-0 rounded border border-line bg-paper px-2.5 py-1.5 font-mono text-[13px]"
+              className="w-full min-w-0 rounded border border-line bg-paper px-2.5 py-1.5 font-mono text-sm"
             >
               {matches.length === 0 && <option value="">ไม่พบ branch ที่ตรงกับคำค้น</option>}
               {matches.map(b => (
@@ -322,12 +351,12 @@ export function ConfirmDialog({
               ))}
             </select>
             {selected && (
-              <span className="min-w-0 truncate text-[13px] text-faint">
+              <span className="min-w-0 truncate text-sm text-faint">
                 commit ล่าสุด: {selected.lastCommitSubject || '—'} · {relativeTime(selected.lastCommitDate)}
                 {selected.isCurrent && ' · อยู่บน branch นี้อยู่แล้ว'}
               </span>
             )}
-            <span className="text-[13px] text-faint">จะ checkout ไป branch นี้ ไม่สร้างใหม่</span>
+            <span className="text-sm text-faint">จะ checkout ไป branch นี้ ไม่สร้างใหม่</span>
           </Option>
 
           <Option
@@ -342,16 +371,16 @@ export function ConfirmDialog({
                 : undefined
             }
           >
-            <span className="min-w-0 truncate text-[13px]">
+            <span className="min-w-0 truncate text-sm">
               ทำต่อบน <span className="font-mono">{current?.name ?? '—'}</span>
             </span>
             {current && (
-              <span className="min-w-0 truncate text-[13px] text-faint">
+              <span className="min-w-0 truncate text-sm text-faint">
                 commit ล่าสุด {current.lastCommitSubject || '—'} · {relativeTime(current.lastCommitDate)}
               </span>
             )}
             {dirty > 0 && (
-              <span className="text-[13px] text-warn-deep">
+              <span className="text-sm text-warn">
                 มีไฟล์ที่แก้ค้างไว้ {dirty} ไฟล์ การเปลี่ยนแปลงรอบนี้จะรวมอยู่ด้วย
               </span>
             )}
@@ -379,7 +408,8 @@ export function ConfirmDialog({
                     />
                   )}
                   <span className="truncate font-mono text-xs text-muted">{s.branch}</span>
-                  <span className="shrink-0 text-[13px] text-faint">· {s.defectIds.length} defect</span>
+                  <span className="shrink-0 text-sm text-faint">· {AGENT_LABELS[s.agent]}</span>
+                  <span className="shrink-0 text-sm text-faint">· {s.defectIds.length} defect</span>
                 </label>
               ))}
             </Option>
@@ -387,11 +417,11 @@ export function ConfirmDialog({
         </div>
 
         <div className="flex min-w-0 flex-col gap-2">
-          <span className="text-[13px] text-faint">รวมอยู่ใน</span>
-          {defects.map((d, i) => (
+          <span className="text-sm text-faint">รวมอยู่ใน</span>
+          {items.map((d, i) => (
             <div key={d.id} className="flex min-w-0 items-center gap-2.5">
-              <span className="w-4 shrink-0 text-right font-mono text-[13px] text-faint">{i + 1}.</span>
-              <span className="shrink-0 font-mono text-[13px] font-medium">{d.key}</span>
+              <span className="w-4 shrink-0 text-right font-mono text-sm text-faint">{i + 1}.</span>
+              <span className="shrink-0 font-mono text-sm font-medium">{d.key}</span>
               <span className="truncate text-sm" title={d.title}>{d.title}</span>
             </div>
           ))}
@@ -402,15 +432,15 @@ export function ConfirmDialog({
             <button
               type="button"
               onClick={() => setPromptOpen(o => !o)}
-              className="self-start text-[13px] text-pine underline hover:text-pine-deep"
+              className="self-start text-sm text-pine underline hover:text-pine-btn-hover"
             >
-              {promptOpen ? 'ซ่อน prompt ที่จะส่งให้ claude' : 'ดู/แก้ prompt ที่จะส่งให้ claude'}
+              {promptOpen ? `ซ่อน prompt ที่จะส่งให้ ${AGENT_LABELS[agent]}` : `ดู/แก้ prompt ที่จะส่งให้ ${AGENT_LABELS[agent]}`}
             </button>
-            {promptError && <span className="text-[13px] text-warn-deep">{promptError}</span>}
+            {promptError && <span className="text-sm text-warn">{promptError}</span>}
             {promptOpen && (
               <>
-                <span className="text-[13px] text-muted">
-                  เนื้อหานี้จะถูกเขียนลง .pat-task.md ให้ claude อ่านเป็นงานตั้งต้น — แก้ได้ทุกบรรทัด
+                <span className="text-sm text-muted">
+                  เนื้อหานี้จะถูกเขียนลง .pat-task.md ให้ {AGENT_LABELS[agent]} อ่านเป็นงานตั้งต้น — แก้ได้ทุกบรรทัด
                   ลบทิ้งทั้งหมด = ให้ระบบสรุปเองแบบเดิม
                 </span>
                 <textarea
@@ -418,19 +448,19 @@ export function ConfirmDialog({
                   spellCheck={false}
                   onChange={e => setPrompt(e.target.value)}
                   placeholder={promptError ? '' : prompt === '' ? 'กำลังเตรียม prompt…' : ''}
-                  className="min-h-[240px] w-full resize-y rounded border border-line bg-paper px-3 py-2 font-mono text-[13px] leading-[1.6] text-ink"
+                  className="min-h-dialog w-full resize-y rounded border border-line bg-paper px-3 py-2 font-mono text-sm leading-relaxed text-ink"
                 />
               </>
             )}
           </div>
         )}
 
-        {error && <span className="whitespace-pre-wrap text-[13px] text-danger">{error}</span>}
+        {error && <span className="whitespace-pre-wrap text-sm text-danger">{error}</span>}
 
         <div className="mt-1 flex justify-end gap-2.5">
           <Button onClick={onCancel} disabled={busy}>ยกเลิก</Button>
           <Button variant="primary" disabled={!canSubmit} onClick={() => void submit()}>
-            {busy ? 'กำลังเริ่ม…' : 'เริ่มแก้'}
+            {busy ? 'กำลังเริ่ม…' : feature ? 'เริ่มทำ' : 'เริ่มแก้'}
           </Button>
         </div>
       </div>
@@ -459,7 +489,7 @@ function Option({ checked, single, onSelect, label, disabled, disabledHint, chil
   return (
     <div
       className={
-        'flex min-w-0 gap-2.5 rounded border-l-[3px] py-2 pl-2.5 pr-3 transition-colors motion-reduce:transition-none ' +
+        'flex min-w-0 gap-2.5 rounded border-l-4 py-2 pl-2.5 pr-3 transition-colors motion-reduce:transition-none ' +
         (disabled
           ? 'border-l-transparent opacity-50'
           : checked
@@ -492,7 +522,7 @@ function Option({ checked, single, onSelect, label, disabled, disabledHint, chil
         </button>
 
         {disabled ? (
-          <span className="pt-1 text-[13px] text-warn-deep">{disabledHint}</span>
+          <span className="pt-1 text-sm text-warn">{disabledHint}</span>
         ) : (
           <div
             aria-hidden={!checked}

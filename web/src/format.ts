@@ -1,4 +1,4 @@
-import type { Defect, Severity } from '@shared/types'
+import type { Defect, Requirement, Severity } from '@shared/types'
 
 export function relativeTime(iso: string): string {
   const then = new Date(iso).getTime()
@@ -16,11 +16,12 @@ export function relativeTime(iso: string): string {
   return new Date(then).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
 }
 
-export const SEVERITY_STYLE: Record<Severity, { color: string; background: string }> = {
-  critical: { color: '#A32E2E', background: '#A32E2E1F' },
-  high: { color: '#A32E2E', background: '#A32E2E12' },
-  medium: { color: '#A66A0F', background: '#A66A0F12' },
-  low: { color: '#8E939C', background: '#8E939C1F' },
+/** โทน Tag ของแต่ละระดับ — สีจริงอยู่ใน token ไม่ hardcode hex ที่นี่ */
+export const SEVERITY_TONE: Record<Severity, 'danger' | 'warn' | 'neutral' | 'faint'> = {
+  critical: 'danger',
+  high: 'warn',
+  medium: 'neutral',
+  low: 'faint',
 }
 
 /** คำที่ไม่ช่วยแยกแยะ ตัดออกก่อนทำ slug */
@@ -85,6 +86,49 @@ export function suggestBranch(defects: Defect[]): string {
 
   const words = shared.length > 0 ? shared : keywords(first.title)
   return fit(`fix/${key}-plus${defects.length - 1}`, words.slice(0, 2))
+}
+
+/**
+ * เดาชื่อ branch ของ feature จากชื่อที่พิมพ์ — feat/export-csv-report
+ * ชื่อไทยล้วนไม่มีคำ ASCII เหลือ → feat/feature ให้ผู้ใช้แก้เอาเอง
+ */
+export function suggestFeatureBranch(title: string): string {
+  const [first, ...rest] = keywords(title)
+  return first ? fit(`feat/${first}`, rest.slice(0, 3)) : 'feat/feature'
+}
+
+/**
+ * แปลงข้อความที่พิมพ์บรรทัดละข้อเป็น requirement พร้อมรหัส REQ-n ตามลำดับ
+ * ตัด bullet หรือเลขข้อที่คนมักพิมพ์ติดมา (- * • 1. 2)) จะได้ไม่ซ้อนกับรหัสที่ตั้งให้
+ */
+export function parseRequirements(text: string): Requirement[] {
+  return splitItems(text).map((t, i) => ({ key: `REQ-${i + 1}`, text: t }))
+}
+
+/** ข้อความบรรทัดละข้อ → รายการ ตัด bullet/เลขข้อ ข้ามบรรทัดว่าง */
+export function splitItems(text: string): string[] {
+  return text
+    .split('\n')
+    .map(line => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
+    .filter(Boolean)
+}
+
+/**
+ * คำที่ทำให้ requirement ตรวจไม่ได้ ตามแนว ISO 29148 (subjective, comparative, open-ended)
+ * ตรงกับ prompt เริ่มงานที่ห้าม agent ใช้คำพวกนี้ใน REQ ที่เขียนใหม่
+ */
+const VAGUE_WORDS = /เร็ว|ง่าย|เหมาะสม|ถูกต้อง|ดีขึ้น|ครบถ้วน|สะดวก|สวย|เสถียร|\b(fast|easy|proper(ly)?|correct(ly)?|better|nice|robust)\b/i
+/** และ/หรือ กลางประโยคมักแปลว่ามี 2 พฤติกรรมในข้อเดียว */
+const TWO_BEHAVIOURS = /\S\s+(และ|หรือ|and|or)\s+\S/i
+
+/**
+ * คำใบ้ระหว่างพิมพ์ requirement — เตือน ไม่บล็อก
+ * คืน null เมื่อไม่มีอะไรน่าติง
+ */
+export function requirementHint(text: string): string | null {
+  if (VAGUE_WORDS.test(text)) return 'มีคำที่วัดไม่ได้ ลองใส่ค่าหรือตัวอย่างที่เห็นได้'
+  if (TWO_BEHAVIOURS.test(text)) return 'อาจเป็น 2 ข้อ ถ้าใช่ให้แยกบรรทัด'
+  return null
 }
 
 /** แปลงข้อความคั่นจุลภาคเป็นรายชื่อ branch — ใช้ทั้งค่าตั้งต้นและค่าเฉพาะ repo */

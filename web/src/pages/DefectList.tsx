@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { useLocation } from 'wouter'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Defect } from '@shared/types'
@@ -8,12 +9,11 @@ import { relativeTime } from '../format'
 import {
   DEFAULT_FILTERS, NO_FILTERS, applyFilters, type Filters,
 } from '../filters'
-import { Header } from '../components/Header'
 import { DefectRow, DefectRowSkeleton } from '../components/DefectRow'
 import { DefectFilters } from '../components/DefectFilters'
 import { BulkBar } from '../components/BulkBar'
 import { ConfirmDialog, type ConfirmPayload } from '../components/ConfirmDialog'
-import { Button, Card, EmptyState, ErrorBox, SectionTitle } from '../components/ui'
+import { Button, Card, EmptyState, ErrorBox, IconButton, SectionTitle } from '../components/ui'
 
 /** กรองใน memory เร็วอยู่แล้ว หน่วงแค่พอให้ไม่ re-render ทุกตัวอักษร */
 const SEARCH_DEBOUNCE_MS = 150
@@ -33,7 +33,8 @@ export function DefectList() {
   const [, navigate] = useLocation()
   const {
     defects, facets, defectsMeta, defectsLoading, defectsRefreshing, defectsError, loadDefects,
-    workspaces, activeWorkspaceId, sessions, gitStatus, refreshSessions, myName, sourceFor,
+    workspaces, activeWorkspaceId, sessions, gitStatus, refreshSessions, sourceFor,
+    markedFixed, toggleMarkedFixed,
   } = useStore()
 
   // repo ต่อแถว ตั้งต้นที่ workspace ที่กำลังใช้อยู่ ผู้ใช้แก้รายแถวได้
@@ -42,10 +43,7 @@ export function DefectList() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
 
-  // ยังไม่ได้ตั้งชื่อตัวเอง → preset "ของฉัน" กรองจนเหลือ 0 เสมอ อย่าเปิดไว้ตั้งแต่แรก
-  const [filters, setFilters] = useState<Filters>(
-    () => (myName ? DEFAULT_FILTERS : { ...DEFAULT_FILTERS, presets: [] }),
-  )
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS)
   // ช่องค้นหาต้องตอบสนองทันที ส่วนการกรองค่อยตามมาหลัง debounce
   const [typed, setTyped] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
@@ -92,8 +90,8 @@ export function DefectList() {
   )
 
   const visible = useMemo(
-    () => applyFilters(defects, filters, { me: myName, openStatuses, touchedIds, now: Date.now() }),
-    [defects, filters, myName, openStatuses, touchedIds],
+    () => applyFilters(defects, filters, { openStatuses, touchedIds, now: Date.now() }),
+    [defects, filters, openStatuses, touchedIds],
   )
 
   const selectedDefects = useMemo(
@@ -129,7 +127,8 @@ export function DefectList() {
   })
 
   const openSessions = useMemo(
-    () => sessions.filter(s => s.state !== 'closed' && s.workspaceId === targetWorkspace?.id),
+    // ต่อได้เฉพาะ session ที่แก้ defect อยู่ — session feature มี requirement ของตัวเอง ไม่รับ defect เพิ่ม
+    () => sessions.filter(s => s.state !== 'closed' && s.kind !== 'feature' && s.workspaceId === targetWorkspace?.id),
     [sessions, targetWorkspace],
   )
 
@@ -147,6 +146,7 @@ export function DefectList() {
       ? await api.sessions.append(payload.sessionId, selected)
       : await api.sessions.create({
         workspaceId: targetWorkspace.id,
+        agent: payload.agent,
         defectIds: selected,
         branch: payload.branch,
         dirtyStrategy: payload.dirtyStrategy,
@@ -162,25 +162,29 @@ export function DefectList() {
   return (
     <>
       <Card>
-        <Header />
-
-        <div className="flex items-center justify-between px-5 pb-3 pt-[18px]">
+        <div className="flex items-center justify-between px-5 pb-3 pt-4">
           <SectionTitle>Defect ที่รอแก้</SectionTitle>
           <div className="flex items-center gap-3">
             {defectsRefreshing && (
-              <span className="inline-flex items-center gap-1.5 text-[13px] text-faint">
+              <span className="inline-flex items-center gap-1.5 text-sm text-faint">
                 <span className="h-1.5 w-1.5 rounded-full bg-faint pat-pulse" />
                 กำลังดึงข้อมูลใหม่
               </span>
             )}
             {defectsMeta && !defectsRefreshing && (
-              <span className="text-[13px] text-faint">
+              <span className="text-sm text-faint">
                 {defectsMeta.sourceLabel} · อัปเดต{relativeTime(defectsMeta.fetchedAt)}
               </span>
             )}
-            <Button size="sm" onClick={() => void loadDefects(true)} disabled={defectsRefreshing}>
-              โหลดใหม่
-            </Button>
+            <IconButton
+              label="โหลดใหม่"
+              variant="secondary"
+              onClick={() => void loadDefects(true)}
+              disabled={defectsRefreshing}
+            >
+              <RefreshCw aria-hidden size={18} className={defectsRefreshing ? 'pat-pulse' : ''} />
+            </IconButton>
+            <Button onClick={() => navigate('/feature/new')}>สั่งงานเอง</Button>
           </div>
         </div>
 
@@ -190,31 +194,30 @@ export function DefectList() {
               ref={searchRef}
               filters={{ ...filters, search: typed }}
               facets={facets}
-              canFilterMine={Boolean(myName)}
               onChange={next => {
                 setTyped(next.search)
                 setFilters(next)
               }}
             />
-            <div className="flex items-center gap-3 text-[13px] text-faint">
+            <div className="flex items-center gap-3 text-sm text-faint">
               <span>แสดง {visible.length} จาก {defects.length} รายการ</span>
               {defectsMeta?.filtered && (
                 <span>· source กรองมาแล้วจาก {defectsMeta.filtered.total}</span>
               )}
               {selected.length >= MAX_SELECT && (
-                <span className="text-warn-deep">· เลือกได้สูงสุด {MAX_SELECT} รายการต่อ session</span>
+                <span className="text-warn">· เลือกได้สูงสุด {MAX_SELECT} รายการต่อ session</span>
               )}
             </div>
           </div>
         )}
 
         {stale && (
-          <div className="mx-5 mb-3 flex flex-col gap-1 rounded border border-warn bg-warn/5 px-3.5 py-3">
-            <span className="text-[13px] text-warn-deep">
+          <div className="mx-5 mb-3 flex flex-col gap-1 rounded border border-warn bg-warn-soft px-3.5 py-3">
+            <span className="text-sm text-warn">
               ข้อมูลจากเมื่อ {clockTime(defectsMeta?.fetchedAt)} · ต่อเซิร์ฟเวอร์ไม่ได้ตอนนี้
             </span>
-            <span className="text-[13px] text-muted">{stale.reason}</span>
-            <span className="text-[13px] text-faint">
+            <span className="text-sm text-muted">{stale.reason}</span>
+            <span className="text-sm text-faint">
               {stale.network === 'internal'
                 ? 'ปิดปุ่มแก้ไว้ก่อนเพราะข้อมูลอาจเก่า — ต่อ VPN แล้วกดโหลดใหม่ หรือสลับไป source ตัวอย่างเพื่อทำงานต่อ'
                 : 'ปิดปุ่มแก้ไว้ก่อนเพราะข้อมูลอาจเก่า — กดโหลดใหม่เมื่อต่อเน็ตได้'}
@@ -232,7 +235,7 @@ export function DefectList() {
           ) : defectsError ? (
             <ErrorBox
               title={`โหลด defect ไม่สำเร็จ — ${defectsError}`}
-              hint="เช็คว่า pat ยังรันอยู่ แล้วลองอีกครั้ง"
+              hint="เช็คว่า fakti ยังรันอยู่ แล้วลองอีกครั้ง"
               action={<Button size="sm" onClick={() => void loadDefects()}>ลองใหม่</Button>}
             />
           ) : defects.length === 0 ? (
@@ -244,11 +247,7 @@ export function DefectList() {
           ) : visible.length === 0 ? (
             <EmptyState
               title="ไม่มีรายการที่ตรงกับตัวกรอง"
-              hint={
-                filters.presets.includes('mine') && myName
-                  ? `จาก ${defects.length} รายการ ไม่มีอันไหนที่ทั้งยังไม่ปิดและมอบหมายให้ ${myName}`
-                  : `กรองจาก ${defects.length} รายการแล้วไม่เหลือเลย`
-              }
+              hint={`กรองจาก ${defects.length} รายการแล้วไม่เหลือเลย`}
               action={
                 <Button size="sm" onClick={() => { setTyped(''); setFilters(NO_FILTERS) }}>
                   ดูทั้งหมด {defects.length} รายการ
@@ -258,7 +257,7 @@ export function DefectList() {
           ) : (
             <div
               ref={scrollRef}
-              className="max-h-[62vh] overflow-y-auto rounded-card border border-hair bg-paper"
+              className="max-h-list overflow-y-auto rounded-card border border-hair bg-paper"
             >
               {/* virtual scrolling — 1000 แถวจริงๆ ทำให้หน้าหน่วง */}
               <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
@@ -290,6 +289,8 @@ export function DefectList() {
                         expanded={expanded === d.id}
                         onToggleExpand={() => setExpanded(prev => (prev === d.id ? null : d.id))}
                         fixedIn={fixedIn[d.id]}
+                        markedFixed={markedFixed.includes(d.id)}
+                        onToggleMarkedFixed={() => toggleMarkedFixed(d.id)}
                       />
                     </div>
                   )

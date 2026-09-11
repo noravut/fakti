@@ -2,9 +2,10 @@ import { execFile } from 'node:child_process'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { DirtyConflict, QaPromptPayload, TaskPromptPayload } from '@shared/types'
+import { SESSION_AGENTS } from '@shared/types'
 import { readWorkspaces } from '../core/config'
 import * as git from '../core/git'
-import { buildPrompt } from '../core/prompt'
+import { buildFeaturePrompt, buildPrompt } from '../core/prompt'
 import { DirtyError, HttpError, type SessionManager } from '../core/session'
 import { resolveDefects } from '../core/source/service'
 
@@ -14,18 +15,31 @@ const branchChoice = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('current') }),
 ])
 
+const featureSpec = z.object({
+  title: z.string().trim().min(1),
+  context: z.string().optional(),
+  requirements: z.array(z.object({ key: z.string().min(1), text: z.string().trim().min(1) })).min(1),
+  nonGoals: z.array(z.string().trim().min(1)).optional(),
+})
+
+/** ต้องมีอย่างใดอย่างหนึ่ง: defect จาก tracker หรือ feature ที่พิมพ์เอง */
+const hasWork = (v: { defectIds: string[]; feature?: unknown }) => v.defectIds.length > 0 || v.feature !== undefined
+
 const createBody = z.object({
   workspaceId: z.string().min(1),
-  defectIds: z.array(z.string().min(1)).min(1),
+  agent: z.enum(SESSION_AGENTS).default('claude'),
+  defectIds: z.array(z.string().min(1)),
+  feature: featureSpec.optional(),
   branch: branchChoice,
   dirtyStrategy: z.enum(['stash', 'keep']).optional(),
   prompt: z.string().trim().min(1).optional(),
-})
+}).refine(hasWork, { message: 'ไม่มีงาน' })
 
 const previewBody = z.object({
   workspaceId: z.string().min(1),
-  defectIds: z.array(z.string().min(1)).min(1),
-})
+  defectIds: z.array(z.string().min(1)),
+  feature: featureSpec.optional(),
+}).refine(hasWork, { message: 'ไม่มีงาน' })
 
 const appendBody = z.object({
   defectIds: z.array(z.string().min(1)).min(1),
@@ -47,7 +61,7 @@ export function sessionRoutes(manager: SessionManager): Hono {
   app.post('/', async c => {
     const parsed = createBody.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'ข้อมูลไม่ครบ' }, 400)
-    const { workspaceId, defectIds, branch, dirtyStrategy } = parsed.data
+    const { workspaceId, defectIds, feature, branch, dirtyStrategy } = parsed.data
 
     if (branch.kind !== 'current' && !git.isValidBranchName(branch.name)) {
       return c.json({ error: 'ชื่อ branch ใช้ได้แค่ a-z 0-9 . _ / -' }, 400)
@@ -58,9 +72,10 @@ export function sessionRoutes(manager: SessionManager): Hono {
 
     try {
       // ดึงรายละเอียดเต็มตรงนี้ เพราะ prompt ที่ส่งให้ agent ต้องมี description
-      const defects = await resolveDefects(workspace, defectIds)
+      // feature ไม่มี defect ให้ดึง — requirement มาครบในตัวอยู่แล้ว
+      const defects = feature ? [] : await resolveDefects(workspace, defectIds)
       return c.json(
-        await manager.create({ workspace, defects, branch, dirtyStrategy, prompt: parsed.data.prompt }),
+        await manager.create({ workspace, defects, feature, branch, dirtyStrategy, agent: parsed.data.agent, prompt: parsed.data.prompt }),
         201,
       )
     } catch (err) {
@@ -75,8 +90,10 @@ export function sessionRoutes(manager: SessionManager): Hono {
     const workspace = readWorkspaces().find(w => w.id === parsed.data.workspaceId)
     if (!workspace) return c.json({ error: 'ไม่พบ workspace' }, 404)
     try {
-      const defects = await resolveDefects(workspace, parsed.data.defectIds)
-      const body: TaskPromptPayload = { prompt: buildPrompt(defects) }
+      const { feature } = parsed.data
+      const body: TaskPromptPayload = {
+        prompt: feature ? buildFeaturePrompt(feature) : buildPrompt(await resolveDefects(workspace, parsed.data.defectIds)),
+      }
       return c.json(body)
     } catch (err) {
       return errorResponse(c, err)

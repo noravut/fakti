@@ -1,0 +1,180 @@
+import { useMemo, useState } from 'react'
+import { Link, useLocation } from 'wouter'
+import type { FeatureSpec } from '@shared/types'
+import { api } from '../api'
+import { useStore } from '../store'
+import { parseRequirements, requirementHint, splitItems } from '../format'
+import { BackLink, useEscapeBack } from '../components/BackLink'
+import { ConfirmDialog, type ConfirmPayload } from '../components/ConfirmDialog'
+import { Button, Card, EmptyState, Input, SectionTitle } from '../components/ui'
+
+const TEXTAREA =
+  'w-full resize-y rounded border border-line bg-paper px-3 py-2 text-sm leading-relaxed text-ink ' +
+  'placeholder:text-faint'
+
+/**
+ * หน้าสั่งทำ feature จาก requirement ที่พิมพ์เอง — ทางเข้าคนละทางกับ defect list
+ * ฟอร์ม 3 ช่องแล้วต่อเข้า ConfirmDialog เดิม (เลือก branch + ดู/แก้ prompt)
+ */
+export function FeatureNew() {
+  const [, navigate] = useLocation()
+  const { workspaces, activeWorkspaceId, gitStatus, refreshSessions } = useStore()
+  const workspace = workspaces.find(w => w.id === activeWorkspaceId)
+  useEscapeBack('/')
+
+  const [title, setTitle] = useState('')
+  const [reqText, setReqText] = useState('')
+  const [context, setContext] = useState('')
+  const [nonGoalText, setNonGoalText] = useState('')
+  const [confirming, setConfirming] = useState(false)
+
+  const feature = useMemo<FeatureSpec>(() => {
+    const nonGoals = splitItems(nonGoalText)
+    return {
+      title: title.trim(),
+      context: context.trim() || undefined,
+      requirements: parseRequirements(reqText),
+      nonGoals: nonGoals.length > 0 ? nonGoals : undefined,
+    }
+  }, [title, context, reqText, nonGoalText])
+  const ready = feature.title !== '' && feature.requirements.length > 0
+
+  async function start(payload: ConfirmPayload) {
+    if (!workspace) return
+    const session = await api.sessions.create({
+      workspaceId: workspace.id,
+      agent: payload.agent,
+      defectIds: [],
+      feature,
+      branch: payload.branch,
+      dirtyStrategy: payload.dirtyStrategy,
+      prompt: payload.prompt,
+    })
+    await refreshSessions()
+    setConfirming(false)
+    navigate(`/session/${session.id}`)
+  }
+
+  return (
+    <>
+      <BackLink href="/" label="กลับไป Defect list" />
+
+      <Card>
+        {!workspace ? (
+          <div className="px-5 py-6">
+            <EmptyState
+              title="ยังไม่มี repo ให้ทำงาน"
+              hint="เพิ่ม repo ในหน้าตั้งค่าก่อน แล้วกลับมาสั่งงาน"
+              action={<Link href="/settings"><Button size="sm">ไปหน้าตั้งค่า</Button></Link>}
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-5 px-5 pb-5 pt-4">
+            <div className="flex flex-col gap-1">
+              <SectionTitle>สั่งงานเอง</SectionTitle>
+              <span className="text-sm text-muted">
+                งานที่ไม่ได้มาจาก tracker — เพิ่มความสามารถ แก้ของเดิม ถอดของที่ไม่ใช้ หรืองาน maintenance
+                พิมพ์สิ่งที่ต้องได้หลังทำเสร็จ บรรทัดละข้อ ผู้ช่วยเขียนโค้ด จะทำตามนั้น
+                ทำเสร็จกด "ทวน requirement" ในหน้า session เพื่อให้มันตรวจว่าครบทุกข้อ
+              </span>
+            </div>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm text-muted">ชื่องาน</span>
+              <Input
+                autoFocus
+                value={title}
+                spellCheck={false}
+                placeholder="เช่น Export รายงานเป็น CSV · ถอดเมนูตั้งค่าเก่าออก"
+                onChange={e => setTitle(e.target.value)}
+                className="w-full"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm text-muted">
+                สิ่งที่ต้องได้หลังทำเสร็จ
+                <span className="text-faint"> · บรรทัดละข้อ · fakti ตั้งรหัส REQ-n ให้ ผู้ช่วยเขียนโค้ด อ้างใน commit</span>
+              </span>
+              <textarea
+                value={reqText}
+                rows={6}
+                spellCheck={false}
+                placeholder={'กดปุ่ม Export แล้วได้ไฟล์ CSV\nหัวคอลัมน์เป็นภาษาเดียวกับหน้าจอ\nไม่มีข้อมูลให้ปุ่มกดไม่ได้พร้อมบอกเหตุ'}
+                onChange={e => setReqText(e.target.value)}
+                className={TEXTAREA}
+              />
+              {feature.requirements.length > 0 && (
+                <div className="flex flex-col gap-1 pt-1">
+                  {feature.requirements.map(r => {
+                    const hint = requirementHint(r.text)
+                    return (
+                      <div key={r.key} className="flex min-w-0 items-baseline gap-2.5 text-sm">
+                        <span className="w-14 shrink-0 font-mono text-faint">{r.key}</span>
+                        <span className="truncate" title={r.text}>{r.text}</span>
+                        {hint && (
+                          <span className="inline-flex shrink-0 items-center gap-1.5 text-warn">
+                            <span className="h-1.5 w-1.5 rounded-full bg-warn" />
+                            {hint}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm text-muted">
+                ไม่ทำ / ห้ามเปลี่ยน
+                <span className="text-faint"> · ไม่บังคับ · บรรทัดละข้อ · สิ่งที่รู้อยู่แล้วว่าห้ามแตะ ผู้ช่วยเขียนโค้ด จะเติมต่อเอง</span>
+              </span>
+              <textarea
+                value={nonGoalText}
+                rows={2}
+                spellCheck={false}
+                placeholder={'ห้ามเปลี่ยนรูปแบบไฟล์ export เดิม\nไม่แตะหน้า admin'}
+                onChange={e => setNonGoalText(e.target.value)}
+                className={TEXTAREA}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm text-muted">
+                ข้อมูลประกอบ<span className="text-faint"> · ไม่บังคับ · ใครใช้ · วันนี้ติดอะไร · หน้าไหน ไฟล์ไหน</span>
+              </span>
+              <textarea
+                value={context}
+                rows={3}
+                spellCheck={false}
+                placeholder={'ทีมบัญชีใช้ทุกสิ้นเดือน ตอนนี้ต้อง copy จากตารางไปวาง Excel เอง\nหน้า /reports · web/src/pages/Reports.tsx'}
+                onChange={e => setContext(e.target.value)}
+                className={TEXTAREA}
+              />
+            </label>
+
+            <div className="flex items-center justify-end gap-3 border-t border-hair pt-4">
+              {!ready && <span className="text-sm text-faint">ต้องมีชื่อและอย่างน้อย 1 ข้อ</span>}
+              <Button variant="primary" disabled={!ready} onClick={() => setConfirming(true)}>
+                ถัดไป
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {confirming && workspace && (
+        <ConfirmDialog
+          defects={[]}
+          feature={feature}
+          workspace={workspace}
+          openSessions={[]}
+          dirtyCount={gitStatus?.isDirty ? gitStatus.dirtyCount : 0}
+          onCancel={() => setConfirming(false)}
+          onSubmit={start}
+        />
+      )}
+    </>
+  )
+}
