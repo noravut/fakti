@@ -157,7 +157,23 @@ no Docker, no Next.js — all deliberate.
 
 ## Configuration
 
-Config lives in `~/.pat/` and is meant to be edited by hand:
+Config lives in `~/.pat/` and is meant to be edited by hand.
+
+`~` is **your home directory**, not the filesystem root — so `~/.pat` means
+`/home/<you>/.pat` on Linux and WSL, or `/Users/<you>/.pat` on macOS. There is no `/.pat`.
+It is also a **hidden** folder, since the name starts with a dot, so plain `ls` will not show
+it. To find it:
+
+```bash
+ls -a ~/.pat            # what's in there
+cat ~/.pat/sources.json # the file you'll edit most
+echo ~/.pat             # prints the absolute path on your machine
+```
+
+The folder does not exist until fakti creates it. `secrets.json` is written when the server
+starts; `sources.json` is written the first time you open the web UI, copied from
+`server/src/sources.default.json`. So if you started the server but never opened the browser,
+`sources.json` isn't there yet.
 
 | File | Contents | Safe to share |
 |---|---|---|
