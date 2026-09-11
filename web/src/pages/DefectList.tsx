@@ -33,7 +33,8 @@ export function DefectList() {
   const [, navigate] = useLocation()
   const {
     defects, facets, defectsMeta, defectsLoading, defectsRefreshing, defectsError, loadDefects,
-    workspaces, activeWorkspaceId, sessions, gitStatus, refreshSessions, myName, sourceFor,
+    workspaces, activeWorkspaceId, sessions, gitStatus, refreshSessions, sourceFor,
+    markedFixed, toggleMarkedFixed,
   } = useStore()
 
   // repo ต่อแถว ตั้งต้นที่ workspace ที่กำลังใช้อยู่ ผู้ใช้แก้รายแถวได้
@@ -42,10 +43,7 @@ export function DefectList() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
 
-  // ยังไม่ได้ตั้งชื่อตัวเอง → preset "ของฉัน" กรองจนเหลือ 0 เสมอ อย่าเปิดไว้ตั้งแต่แรก
-  const [filters, setFilters] = useState<Filters>(
-    () => (myName ? DEFAULT_FILTERS : { ...DEFAULT_FILTERS, presets: [] }),
-  )
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS)
   // ช่องค้นหาต้องตอบสนองทันที ส่วนการกรองค่อยตามมาหลัง debounce
   const [typed, setTyped] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
@@ -92,8 +90,8 @@ export function DefectList() {
   )
 
   const visible = useMemo(
-    () => applyFilters(defects, filters, { me: myName, openStatuses, touchedIds, now: Date.now() }),
-    [defects, filters, myName, openStatuses, touchedIds],
+    () => applyFilters(defects, filters, { openStatuses, touchedIds, now: Date.now() }),
+    [defects, filters, openStatuses, touchedIds],
   )
 
   const selectedDefects = useMemo(
@@ -148,6 +146,7 @@ export function DefectList() {
       ? await api.sessions.append(payload.sessionId, selected)
       : await api.sessions.create({
         workspaceId: targetWorkspace.id,
+        agent: payload.agent,
         defectIds: selected,
         branch: payload.branch,
         dirtyStrategy: payload.dirtyStrategy,
@@ -192,7 +191,6 @@ export function DefectList() {
               ref={searchRef}
               filters={{ ...filters, search: typed }}
               facets={facets}
-              canFilterMine={Boolean(myName)}
               onChange={next => {
                 setTyped(next.search)
                 setFilters(next)
@@ -246,11 +244,7 @@ export function DefectList() {
           ) : visible.length === 0 ? (
             <EmptyState
               title="ไม่มีรายการที่ตรงกับตัวกรอง"
-              hint={
-                filters.presets.includes('mine') && myName
-                  ? `จาก ${defects.length} รายการ ไม่มีอันไหนที่ทั้งยังไม่ปิดและมอบหมายให้ ${myName}`
-                  : `กรองจาก ${defects.length} รายการแล้วไม่เหลือเลย`
-              }
+              hint={`กรองจาก ${defects.length} รายการแล้วไม่เหลือเลย`}
               action={
                 <Button size="sm" onClick={() => { setTyped(''); setFilters(NO_FILTERS) }}>
                   ดูทั้งหมด {defects.length} รายการ
@@ -292,6 +286,8 @@ export function DefectList() {
                         expanded={expanded === d.id}
                         onToggleExpand={() => setExpanded(prev => (prev === d.id ? null : d.id))}
                         fixedIn={fixedIn[d.id]}
+                        markedFixed={markedFixed.includes(d.id)}
+                        onToggleMarkedFixed={() => toggleMarkedFixed(d.id)}
                       />
                     </div>
                   )

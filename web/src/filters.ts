@@ -12,10 +12,9 @@ export interface IndexedDefect extends Defect {
   createdMs: number
 }
 
-export type PresetId = 'mine' | 'severe' | 'thisWeek' | 'touched'
+export type PresetId = 'severe' | 'thisWeek' | 'touched'
 
 export const PRESETS: { id: PresetId; label: string }[] = [
-  { id: 'mine', label: 'ของฉัน' },
   { id: 'severe', label: 'รุนแรงสูง' },
   { id: 'thisWeek', label: 'ใหม่สัปดาห์นี้' },
   { id: 'touched', label: 'ที่เคยแตะ' },
@@ -31,10 +30,10 @@ export interface Filters {
   onlyOpen: boolean
 }
 
-/** ค่าเริ่มต้นตามสเปก: ยังไม่ปิด + เฉพาะที่มอบหมายให้ฉัน */
+/** ค่าเริ่มต้น: เอาเฉพาะที่ยังไม่ปิด ใครรับผิดชอบค่อยเลือกเองจากช่อง "ผู้รับผิดชอบ" */
 export const DEFAULT_FILTERS: Filters = {
   search: '',
-  presets: ['mine'],
+  presets: [],
   statuses: [],
   severities: [],
   assignees: [],
@@ -51,8 +50,6 @@ export const NO_FILTERS: Filters = {
 }
 
 export interface FilterContext {
-  /** ชื่อผู้ใช้ตามที่ tracker บันทึก — ไม่ตั้งค่า = ตัวกรอง "ของฉัน" ใช้ไม่ได้ */
-  me: string | null
   openStatuses: string[]
   touchedIds: Set<string>
   now: number
@@ -101,8 +98,6 @@ function isOpen(d: IndexedDefect, openStatuses: string[]): boolean {
 
 function passesPreset(d: IndexedDefect, preset: PresetId, ctx: FilterContext): boolean {
   switch (preset) {
-    case 'mine':
-      return ctx.me !== null && d.assignee === ctx.me
     case 'severe':
       return SEVERE.includes(d.severity)
     case 'thisWeek':

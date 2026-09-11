@@ -44,6 +44,7 @@ export function FeatureNew() {
     if (!workspace) return
     const session = await api.sessions.create({
       workspaceId: workspace.id,
+      agent: payload.agent,
       defectIds: [],
       feature,
       branch: payload.branch,
@@ -75,7 +76,7 @@ export function FeatureNew() {
             <div className="flex flex-col gap-1">
               <SectionTitle>สร้าง feature</SectionTitle>
               <span className="text-[13px] text-muted">
-                พิมพ์สิ่งที่ feature นี้ควรทำได้ บรรทัดละข้อ claude จะทำตามนั้น
+                พิมพ์สิ่งที่ feature นี้ควรทำได้ บรรทัดละข้อ ผู้ช่วยเขียนโค้ด จะทำตามนั้น
                 ทำเสร็จกด "ทวน requirement" ในหน้า session เพื่อให้มันตรวจว่าครบทุกข้อ
               </span>
             </div>
@@ -95,7 +96,7 @@ export function FeatureNew() {
             <label className="flex flex-col gap-1.5">
               <span className="text-[13px] text-muted">
                 สิ่งที่ควรทำได้
-                <span className="text-faint"> · บรรทัดละข้อ · fakti ตั้งรหัส REQ-n ให้ claude อ้างใน commit</span>
+                <span className="text-faint"> · บรรทัดละข้อ · fakti ตั้งรหัส REQ-n ให้ ผู้ช่วยเขียนโค้ด อ้างใน commit</span>
               </span>
               <textarea
                 value={reqText}
@@ -129,7 +130,7 @@ export function FeatureNew() {
             <label className="flex flex-col gap-1.5">
               <span className="text-[13px] text-muted">
                 ไม่ทำ / ห้ามเปลี่ยน
-                <span className="text-faint"> · ไม่บังคับ · บรรทัดละข้อ · สิ่งที่รู้อยู่แล้วว่าห้ามแตะ claude จะเติมต่อเอง</span>
+                <span className="text-faint"> · ไม่บังคับ · บรรทัดละข้อ · สิ่งที่รู้อยู่แล้วว่าห้ามแตะ ผู้ช่วยเขียนโค้ด จะเติมต่อเอง</span>
               </span>
               <textarea
                 value={nonGoalText}

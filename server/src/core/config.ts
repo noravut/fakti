@@ -3,7 +3,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { z } from 'zod'
 import type { Session, Settings, Workspace } from '@shared/types'
-import { DEFAULT_PROTECTED_BRANCHES, WORKSPACE_COLORS } from '@shared/types'
+import { DEFAULT_PROTECTED_BRANCHES, SESSION_AGENTS, WORKSPACE_COLORS } from '@shared/types'
 
 export const PAT_DIR = path.join(os.homedir(), '.pat')
 
@@ -51,6 +51,7 @@ const featureSchema = z.object({
 
 const sessionSchema = z.object({
   id: z.string().min(1),
+  agent: z.enum(SESSION_AGENTS).default('claude'),
   workspaceId: z.string().min(1),
   branch: z.string().min(1),
   baseCommit: z.string(),

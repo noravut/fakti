@@ -2,10 +2,12 @@ import { useEffect, useRef } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import type { ClientMessage, DiffStat, ServerMessage, SessionState } from '@shared/types'
+import type { ClientMessage, DiffStat, ServerMessage, SessionAgent, SessionState } from '@shared/types'
+import { AGENT_LABELS } from '@shared/types'
 
 interface Props {
   sessionId: string
+  agent: SessionAgent
   onState: (state: SessionState) => void
   onDiff: (stat: DiffStat) => void
   onExit: (code: number) => void
@@ -37,7 +39,7 @@ const THEME = {
   brightWhite: '#FAFAF9',
 }
 
-export function Terminal({ sessionId, onState, onDiff, onExit, onDisconnect }: Props) {
+export function Terminal({ sessionId, agent, onState, onDiff, onExit, onDisconnect }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   // handler ล่าสุดโดยไม่ต้อง re-run effect (จะทำให้ pty หลุดการเชื่อมต่อ)
   const handlers = useRef({ onState, onDiff, onExit, onDisconnect })
@@ -85,7 +87,7 @@ export function Terminal({ sessionId, onState, onDiff, onExit, onDisconnect }: P
       else if (msg.type === 'state') handlers.current.onState(msg.state)
       else if (msg.type === 'diff') handlers.current.onDiff(msg.stat)
       else if (msg.type === 'exit') {
-        term.write(`\r\n\x1b[90m— claude ปิดไปแล้ว (exit ${msg.code}) —\x1b[0m\r\n`)
+        term.write(`\r\n\x1b[90m— ${AGENT_LABELS[agent]} ปิดไปแล้ว (exit ${msg.code}) —\x1b[0m\r\n`)
         handlers.current.onExit(msg.code)
       }
     }
@@ -116,7 +118,7 @@ export function Terminal({ sessionId, onState, onDiff, onExit, onDisconnect }: P
       ws.close(1000)
       term.dispose()
     }
-  }, [sessionId])
+  }, [sessionId, agent])
 
   return <div ref={hostRef} className="h-[420px] w-full bg-term-bg px-2 py-2" />
 }

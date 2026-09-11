@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useLocation } from 'wouter'
 import type { SessionState } from '@shared/types'
+import { AGENT_LABELS } from '@shared/types'
 import { useStore } from '../store'
 import { relativeTime } from '../format'
 import { Header } from '../components/Header'
@@ -50,6 +51,7 @@ export function Sessions() {
                     <span className="h-2 w-2 shrink-0 rounded-full bg-line" />
                   )}
                   <span className="font-mono text-[13px] font-medium">{s.branch}</span>
+                  <span className="text-[13px] text-faint">{AGENT_LABELS[s.agent]}</span>
                   <span className="flex-1 truncate text-[13px] text-muted">
                     {s.feature ? s.feature.title : s.defects.map(d => d.key).join(' · ')}
                   </span>

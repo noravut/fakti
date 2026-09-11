@@ -24,7 +24,7 @@ export function Setup() {
         <div className="flex flex-col gap-1.5 border-b border-hair px-5 py-[18px]">
           <span className="text-[15px] font-semibold">เพิ่ม repo แรกก่อนเริ่ม</span>
           <span className="text-[13px] text-muted">
-            pat ต้องรู้ว่าจะให้ Claude Code ไปแก้โค้ดที่ไหน — ชี้ไปที่โฟลเดอร์ git repo ในเครื่อง
+            pat ต้องรู้ว่าจะให้ ผู้ช่วยเขียนโค้ด ไปแก้โค้ดที่ไหน — ชี้ไปที่โฟลเดอร์ git repo ในเครื่อง
           </span>
         </div>
 

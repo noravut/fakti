@@ -13,7 +13,7 @@ const STAGE_LABEL: Record<CheckStage, string> = {
   map: 'Field mapping',
 }
 
-const PREVIEW_FIELDS = ['key', 'title', 'severity', 'status', 'reporter'] as const
+const PREVIEW_FIELDS = ['key', 'title', 'severity', 'status', 'reporter', 'assignee'] as const
 
 interface Props {
   sources: SourceConfig[]

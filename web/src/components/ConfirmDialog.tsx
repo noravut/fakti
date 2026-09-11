@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
-  BranchChoice, BranchInfo, Defect, DirtyStrategy, FeatureSpec, Session, Workspace,
+  BranchChoice, BranchInfo, Defect, DirtyStrategy, FeatureSpec, Session, SessionAgent, Workspace,
 } from '@shared/types'
+import { AGENT_LABELS, SESSION_AGENTS } from '@shared/types'
 import { ApiError, api } from '../api'
 import { relativeTime, suggestBranch, suggestFeatureBranch } from '../format'
 import { Button, Input } from './ui'
@@ -15,6 +16,7 @@ type Mode = BranchChoice['kind'] | 'append'
 
 export interface ConfirmPayload {
   mode: 'new' | 'append'
+  agent?: SessionAgent
   branch: BranchChoice
   sessionId?: string
   dirtyStrategy?: DirtyStrategy
@@ -40,6 +42,7 @@ export function ConfirmDialog({
   defects, feature, workspace, openSessions, dirtyCount, onCancel, onSubmit,
 }: Props) {
   const [mode, setMode] = useState<Mode>('new')
+  const [agent, setAgent] = useState<SessionAgent>('claude')
   const [sessionId, setSessionId] = useState(openSessions[0]?.id ?? '')
   const [dirty, setDirty] = useState(dirtyCount)
   const [dirtyStrategy, setDirtyStrategy] = useState<DirtyStrategy | undefined>()
@@ -175,7 +178,7 @@ export function ConfirmDialog({
       await onSubmit(
         mode === 'append'
           ? { mode: 'append', branch: choice(), sessionId }
-          : { mode: 'new', branch: choice(), dirtyStrategy, prompt: prompt.trim() ? prompt : undefined },
+          : { mode: 'new', agent, branch: choice(), dirtyStrategy, prompt: prompt.trim() ? prompt : undefined },
       )
     } catch (err) {
       const conflict = err instanceof ApiError ? err.dirty : null
@@ -246,6 +249,21 @@ export function ConfirmDialog({
         </div>
 
         {branchError && <span className="text-[13px] text-danger">{branchError}</span>}
+
+        {mode !== 'append' && (
+          <label className="flex flex-col gap-1.5 text-[13px]">
+            ผู้ช่วยเขียนโค้ด
+            <select
+              value={agent}
+              onChange={e => setAgent(e.target.value as SessionAgent)}
+              disabled={busy}
+              className="rounded border border-line bg-paper px-2.5 py-1.5"
+            >
+              {SESSION_AGENTS.map(value => <option key={value} value={value}>{AGENT_LABELS[value]}</option>)}
+            </select>
+            <span className="text-faint">ต้องติดตั้ง {AGENT_LABELS[agent]} และล็อกอินบนเครื่องนี้ก่อน</span>
+          </label>
+        )}
 
         <div className="flex min-w-0 flex-col gap-1.5">
           <Option
@@ -390,6 +408,7 @@ export function ConfirmDialog({
                     />
                   )}
                   <span className="truncate font-mono text-xs text-muted">{s.branch}</span>
+                  <span className="shrink-0 text-[13px] text-faint">· {AGENT_LABELS[s.agent]}</span>
                   <span className="shrink-0 text-[13px] text-faint">· {s.defectIds.length} defect</span>
                 </label>
               ))}
@@ -415,13 +434,13 @@ export function ConfirmDialog({
               onClick={() => setPromptOpen(o => !o)}
               className="self-start text-[13px] text-pine underline hover:text-pine-deep"
             >
-              {promptOpen ? 'ซ่อน prompt ที่จะส่งให้ claude' : 'ดู/แก้ prompt ที่จะส่งให้ claude'}
+              {promptOpen ? `ซ่อน prompt ที่จะส่งให้ ${AGENT_LABELS[agent]}` : `ดู/แก้ prompt ที่จะส่งให้ ${AGENT_LABELS[agent]}`}
             </button>
             {promptError && <span className="text-[13px] text-warn-deep">{promptError}</span>}
             {promptOpen && (
               <>
                 <span className="text-[13px] text-muted">
-                  เนื้อหานี้จะถูกเขียนลง .pat-task.md ให้ claude อ่านเป็นงานตั้งต้น — แก้ได้ทุกบรรทัด
+                  เนื้อหานี้จะถูกเขียนลง .pat-task.md ให้ {AGENT_LABELS[agent]} อ่านเป็นงานตั้งต้น — แก้ได้ทุกบรรทัด
                   ลบทิ้งทั้งหมด = ให้ระบบสรุปเองแบบเดิม
                 </span>
                 <textarea

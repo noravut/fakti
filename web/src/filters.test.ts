@@ -19,7 +19,6 @@ const raw: Defect[] = [
 const list = indexDefects(raw)
 
 const ctx: FilterContext = {
-  me: 'Noravut',
   openStatuses: ['New', 'Assigned', 'Reopened'],
   touchedIds: new Set(['4']),
   now: NOW,
@@ -77,15 +76,6 @@ test('ค้นหาแบบ substring ทั้งจาก key และ tit
   assert.deepEqual(ids(applyFilters(list, filters({ search: 'SAVE' }), ctx)), ['2'])
 })
 
-test('preset ของฉัน เทียบกับชื่อที่ตั้งไว้', () => {
-  assert.deepEqual(ids(applyFilters(list, filters({ presets: ['mine'] }), ctx)), ['1', '3'])
-})
-
-test('preset ของฉัน ไม่คืนอะไรเลยถ้ายังไม่ได้ตั้งชื่อ', () => {
-  const anon = { ...ctx, me: null }
-  assert.equal(applyFilters(list, filters({ presets: ['mine'] }), anon).length, 0)
-})
-
 test('preset รุนแรงสูง = critical กับ high', () => {
   assert.deepEqual(ids(applyFilters(list, filters({ presets: ['severe'] }), ctx)), ['1', '4'])
 })
@@ -99,7 +89,7 @@ test('preset ที่เคยแตะ ดูจาก session ย้อนห
 })
 
 test('preset หลายอันพร้อมกันต้องผ่านทุกอัน', () => {
-  assert.deepEqual(ids(applyFilters(list, filters({ presets: ['mine', 'severe'] }), ctx)), ['1'])
+  assert.deepEqual(ids(applyFilters(list, filters({ presets: ['thisWeek', 'severe'] }), ctx)), ['1'])
 })
 
 test('เลือกหลายค่าในช่องเดียวกันเป็น OR แต่ข้ามช่องเป็น AND', () => {
@@ -107,20 +97,16 @@ test('เลือกหลายค่าในช่องเดียวก�
   assert.deepEqual(ids(applyFilters(list, f, ctx)), ['1'])
 })
 
-test('ค่าเริ่มต้นคือ ยังไม่ปิด + ของฉัน', () => {
-  assert.deepEqual(DEFAULT_FILTERS.presets, ['mine'])
+test('ค่าเริ่มต้นคือ ยังไม่ปิด และไม่กรองผู้รับผิดชอบให้เอง', () => {
+  assert.deepEqual(DEFAULT_FILTERS.presets, [])
   assert.equal(DEFAULT_FILTERS.onlyOpen, true)
-  // เหลือเฉพาะตัวที่ทั้งยังเปิดอยู่และเป็นของ Noravut
-  assert.deepEqual(ids(applyFilters(list, DEFAULT_FILTERS, ctx)), ['1'])
+  // เหลือทุกตัวที่ยังเปิดอยู่ ไม่ว่าใครรับผิดชอบ
+  assert.deepEqual(ids(applyFilters(list, DEFAULT_FILTERS, ctx)), ['1', '2'])
 })
 
-test('ค่าเริ่มต้นเหลือ 0 ได้จริงเมื่อของที่มอบให้เราปิดไปหมดแล้ว', () => {
-  // เคสเดียวกับ product 16 ของจริง: ตัวที่ยังเปิดไม่มีใครรับ ตัวที่รับไว้ปิดหมดแล้ว
-  const closedMine = indexDefects([
-    { ...raw[0]!, status: 'Archive' },
-    { ...raw[1]!, assignee: undefined },
-  ])
-  assert.equal(applyFilters(closedMine, DEFAULT_FILTERS, ctx).length, 0)
+test('กรองผู้รับผิดชอบด้วยชื่อตัวเองแทน preset เดิมได้ผลเท่ากัน', () => {
+  const f = filters({ assignees: ['Noravut'] })
+  assert.deepEqual(ids(applyFilters(list, f, ctx)), ['1', '3'])
 })
 
 // ── chips ──────────────────────────────────────────────────────

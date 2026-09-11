@@ -30,6 +30,7 @@ export function mapDefect(
   const status = read('status', src.map.status)
   const reporter = read('reporter', src.map.reporter)
   const assignee = read('assignee', src.map.assignee)
+  const tags = read('tags', src.map.tags)
   const createdAt = read('createdAt', src.map.createdAt)
 
   const key = `${src.map.keyPrefix ?? ''}${str(rawKey) || str(id)}`
@@ -62,6 +63,13 @@ export function mapDefect(
   const owner = str(assignee)
   if (owner) defect.assignee = owner
 
+  // เก็บคำเดิมของ tracker ไว้ด้วย — severity ด้านบนถูกยุบเหลือ 4 ระดับของเราไปแล้ว
+  const rawSeverity = str(severity)
+  if (rawSeverity) defect.severityLabel = rawSeverity
+
+  const tagList = toTags(tags)
+  if (tagList.length) defect.tags = tagList
+
   // ไม่มี ticketUrl = ไม่มีปุ่มเปิด ticket ฝั่งหน้าเว็บ
   if (src.ticketUrl) {
     const url = interpolate(src.ticketUrl, { ...vars, id: defect.id, key: defect.key })
@@ -69,6 +77,12 @@ export function mapDefect(
   }
 
   return { defect, missing, missingContext }
+}
+
+/** tracker บางเจ้าส่ง tag เป็น array ของ string บางเจ้าเป็นข้อความคั่นด้วย comma */
+function toTags(value: unknown): string[] {
+  const list = Array.isArray(value) ? value : str(value).split(',')
+  return list.map(v => str(v).trim()).filter(Boolean)
 }
 
 function str(value: unknown): string {

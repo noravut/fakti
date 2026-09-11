@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'wouter'
 import type { DiffStat, Session as SessionRecord, SessionState } from '@shared/types'
+import { AGENT_LABELS } from '@shared/types'
 import { ApiError, api } from '../api'
 import { useStore } from '../store'
 import { useGoHomeWithMessage } from '../components/GoHome'
@@ -172,6 +173,7 @@ export function Session({ id }: { id: string }) {
     )
   }
 
+  const agentLabel = AGENT_LABELS[session.agent]
   const style = STATE_STYLE[state]
   // branch ของผู้ใช้เอง fakti ไม่มีสิทธิ์เปลี่ยนชื่อหรือลบ
   const ownsBranch = session.branchOwnership === 'created'
@@ -200,6 +202,7 @@ export function Session({ id }: { id: string }) {
             </span>
             <span className="text-line">·</span>
             <span className="font-mono text-[13px] font-medium">{session.branch}</span>
+            <span className="text-[13px] text-faint">{agentLabel}</span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -266,7 +269,7 @@ export function Session({ id }: { id: string }) {
                     {!ownsBranch
                       ? `${session.branch} เป็น branch ของคุณเอง fakti ไม่แตะชื่อหรือลบให้`
                       : session.live
-                        ? 'ปิด session = หยุด claude จริงๆ แต่ branch กับงานที่ทำไว้ยังอยู่'
+                        ? `ปิด session = หยุด ${agentLabel} จริงๆ แต่ branch กับงานที่ทำไว้ยังอยู่`
                         : 'session นี้ปิดไปแล้ว'}
                   </div>
                 </div>
@@ -291,6 +294,7 @@ export function Session({ id }: { id: string }) {
         {session.live ? (
           <Terminal
             sessionId={id}
+            agent={session.agent}
             onState={setState}
             onDiff={setDiff}
             onExit={() => setState('closed')}
@@ -322,8 +326,8 @@ export function Session({ id }: { id: string }) {
             disabled={busy || !session.live}
             title={
               !session.live ? 'session ปิดไปแล้ว'
-                : isFeature ? 'ส่ง prompt ให้ claude สวมบท QA ตรวจว่าครบทุก REQ'
-                  : 'ส่ง prompt QA Gate ให้ claude ทวนงานที่แก้'
+                : isFeature ? `ส่ง prompt ให้ ${agentLabel} สวมบท QA ตรวจว่าครบทุก REQ`
+                  : `ส่ง prompt QA Gate ให้ ${agentLabel} ทวนงานที่แก้`
             }
             onClick={() => void openQa()}
           >
@@ -354,13 +358,13 @@ export function Session({ id }: { id: string }) {
             </span>
             <span className="text-[13px] text-muted">
               {isFeature
-                ? 'fakti เติมชื่อ feature ทุก REQ และไฟล์ที่เปลี่ยนจาก git ให้แล้ว claude จะสวมบท QA ตัดสินทีละข้อว่าครบตามที่เขียนไหม'
-                : 'fakti เติมชื่อ defect กับไฟล์ที่เปลี่ยนจาก git ให้แล้ว ส่วนที่เหลือ claude จะสรุปเองจากบทสนทนาที่ทำมา'}
+                ? `fakti เติมชื่อ feature ทุก REQ และไฟล์ที่เปลี่ยนจาก git ให้แล้ว ${agentLabel} จะสวมบท QA ตัดสินทีละข้อว่าครบตามที่เขียนไหม`
+                : `fakti เติมชื่อ defect กับไฟล์ที่เปลี่ยนจาก git ให้แล้ว ส่วนที่เหลือ ${agentLabel} จะสรุปเองจากบทสนทนาที่ทำมา`}
               {' '}— อ่านและแก้ได้ทุกบรรทัดก่อนส่ง
             </span>
             {state === 'working' && (
               <span className="text-[13px] text-warn-deep">
-                claude ยังทำงานอยู่ — ส่งตอนนี้ข้อความจะเข้าคิวรอจนงานปัจจุบันจบ
+                {agentLabel} ยังทำงานอยู่ — คำสั่งนี้จะถูกส่งเข้า terminal ที่กำลังใช้งาน
               </span>
             )}
             <textarea
@@ -448,7 +452,7 @@ export function Session({ id }: { id: string }) {
               ลบ branch <span className="font-mono text-sm">{session.branch}</span>?
             </span>
             <span className="text-sm leading-[1.7] text-muted">
-              claude จะถูกหยุด แล้วลบ branch นี้ทิ้งพร้อม commit
+              {agentLabel} จะถูกหยุด แล้วลบ branch นี้ทิ้งพร้อม commit
               {(diff?.commits.length ?? 0) > 0 && <> {diff?.commits.length} ตัว</>}{' '}
               และไฟล์ที่ยังไม่ commit — working tree กลับไปที่{' '}
               <span className="font-mono text-[13px]">{workspace.baseBranch}</span> เอาคืนไม่ได้
@@ -483,7 +487,7 @@ export function Session({ id }: { id: string }) {
               ปิด session บน <span className="font-mono text-sm">{session.branch}</span>?
             </span>
             <span className="text-sm leading-[1.7] text-muted">
-              claude จะถูกหยุดจริงๆ บทสนทนาที่ค้างอยู่หายไป — แต่ branch,
+              {agentLabel} จะถูกหยุดจริงๆ บทสนทนาที่ค้างอยู่หายไป — แต่ branch,
               commit และไฟล์ที่แก้ไปแล้วยังอยู่ครบ เปิด session ใหม่บน branch เดิมได้ทีหลัง
               <br />
               <span className="text-faint">ถ้าแค่อยากไปทำอย่างอื่นก่อน กด "ย่อเก็บ" มุมซ้ายบนพอ</span>

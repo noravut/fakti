@@ -48,8 +48,12 @@ export interface Defect {
   severity: Severity
   status: string
   reporter?: string
-  /** คนที่ถูกมอบหมายให้แก้ — ใช้กับตัวกรอง "ของฉัน" */
+  /** คนที่ถูกมอบหมายให้แก้ — ใช้กับตัวกรอง "ผู้รับผิดชอบ" */
   assignee?: string
+  /** ระดับความรุนแรงตามคำที่ tracker ใช้จริง เช่น Minor — severity ด้านบนคือค่าที่แปลงแล้ว */
+  severityLabel?: string
+  /** ป้ายกำกับจาก tracker — ไม่มีก็ไม่ต้องแสดงอะไร */
+  tags?: string[]
   createdAt: string
   url?: string
   // ไม่มี field บอก repo — ผู้ใช้ต้องเลือกเอง
@@ -94,6 +98,7 @@ export interface FieldMap {
   status?: string
   reporter?: string
   assignee?: string
+  tags?: string
   createdAt?: string
 }
 
@@ -171,6 +176,13 @@ export type SessionState =
 
 export type SessionKind = 'defect' | 'feature'
 
+export const SESSION_AGENTS = ['claude', 'codex'] as const
+export type SessionAgent = typeof SESSION_AGENTS[number]
+export const AGENT_LABELS: Record<SessionAgent, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+}
+
 /** requirement 1 ข้อ — key คือ REQ-n ที่ fakti ตั้งให้ตามลำดับบรรทัด agent ใช้อ้างใน commit */
 export interface Requirement {
   key: string
@@ -188,6 +200,7 @@ export interface FeatureSpec {
 
 export interface Session {
   id: string
+  agent: SessionAgent
   workspaceId: string
   branch: string
   baseCommit: string
@@ -295,6 +308,8 @@ export type DirtyStrategy = 'stash' | 'keep'
 
 export interface CreateSessionBody {
   workspaceId: string
+  /** ไม่ระบุ = Claude Code เพื่อรองรับ client เดิม */
+  agent?: SessionAgent
   /** ว่างได้เมื่อส่ง feature มา */
   defectIds: string[]
   /** มีค่า = feature session — server ใช้ buildFeaturePrompt แทน */

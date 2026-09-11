@@ -1,8 +1,8 @@
 # fakti
 
-A local dev tool that hands defects to Claude Code and keeps you in control of the terminal.
+A local dev tool that hands defects and features to Claude Code or Codex and keeps you in control of the terminal.
 
-You pick defects in a web UI, fakti creates a git branch, spawns real `claude` in a pty, and streams
+You pick defects in a web UI, fakti creates a git branch, spawns the selected CLI in a pty, and streams
 it to your browser over WebSocket. You can type into that terminal exactly like a normal one —
 answer questions, interrupt with Ctrl+C, scroll history. Nothing is one-shot.
 
@@ -16,7 +16,7 @@ Everything runs on your own machine. The server binds to `127.0.0.1` only.
 |---|---|
 | Node | 20 or newer (developed on 22) |
 | pnpm | 10 (uses `onlyBuiltDependencies` in `pnpm-workspace.yaml`) |
-| `claude` | must be on your `PATH` and already logged in |
+| `claude` or `codex` | the CLI you select must be on your server's `PATH` and already logged in |
 | Build toolchain | needed to compile `node-pty` (a native module) |
 
 Install the toolchain first, or `pnpm install` will fail:
@@ -78,13 +78,24 @@ pnpm typecheck   # tsc --noEmit on both packages
    fakti validates it live and shows the remote and branch list.
 3. Pick a base branch and a colour, then **เพิ่ม repo**.
 4. You're now on the defect list. Tick one or more defects and press **แก้ที่เลือก**.
-5. Confirm the branch name in the dialog, then **เริ่มแก้**.
+5. Choose **Claude Code** or **Codex**, confirm the branch name, then **เริ่มแก้**.
 
 At step 5 fakti will, on your real repo:
 
 - create a branch off `origin/<baseBranch>` (falling back to the local branch if there's no remote)
 - write `.pat-task.md` containing the defect details, and add it to `.git/info/exclude`
-- spawn `claude` in that directory and send it a single line: `อ่าน .pat-task.md แล้วทำตามนั้น`
+- spawn the selected CLI in that directory with the instruction: `อ่าน .pat-task.md แล้วทำตามนั้น`
+
+The same agent selector is available when starting a feature. Claude Code is the default;
+older saved sessions also use Claude Code. Each session remembers its agent, including when
+reopened. Appending defects or sending QA instructions uses that session's existing terminal.
+Reopening starts a new conversation on the same branch; it does not resume the CLI transcript.
+
+For Codex, install and sign in to the CLI before starting a session (`codex login`). fakti runs
+`codex --no-alt-screen` with the initial file instruction as a positional argument. This keeps
+scrollback available and avoids typing the initial task into startup dialogs. Your CLI's model,
+sandbox and approval settings remain in effect; respond to prompts in the browser terminal.
+See the [official Codex CLI reference](https://developers.openai.com/codex/cli/reference).
 
 If your working tree is dirty, the dialog asks first: **stash** (`git stash push -u`) or
 **continue on the current branch** (no new branch is created).
@@ -218,7 +229,7 @@ Verified end to end in a real browser (Chromium via Playwright) against a real g
 - 36 navigation assertions: breadcrumbs, back links, Esc behaviour, browser back from every
   page, unknown URLs, sessions surviving page changes
 
-**Not verified against real Claude Code.** The pty tests used an interactive shim standing in for
+**Full task execution is not verified against real Claude Code or Codex.** The pty tests used an interactive shim standing in for
 `claude`. Spawning, I/O, resize and reconnect are proven; two TUI assumptions are not:
 whether the single-line file prompt behaves as intended, and the `waiting` heuristic that looks
 for `❯`, `(y/n)` or `Do you want`. That heuristic only changes a status colour and the tab

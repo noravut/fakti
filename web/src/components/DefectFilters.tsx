@@ -6,8 +6,6 @@ import { Input } from './ui'
 interface Props {
   filters: Filters
   facets: Facets
-  /** ยังไม่ได้ตั้งชื่อตัวเองในหน้าตั้งค่า → ตัวกรอง "ของฉัน" ใช้ไม่ได้ */
-  canFilterMine: boolean
   onChange: (next: Filters) => void
 }
 
@@ -16,7 +14,7 @@ interface Props {
  * ตัวเลือกใน dropdown มาจากค่าที่พบจริงในข้อมูล ไม่ได้ hardcode
  */
 export const DefectFilters = forwardRef<HTMLInputElement, Props>(
-  function DefectFilters({ filters, facets, canFilterMine, onChange }, searchRef) {
+  function DefectFilters({ filters, facets, onChange }, searchRef) {
     const chips = activeChips(filters)
 
     const togglePreset = (id: PresetId) => {
@@ -43,20 +41,16 @@ export const DefectFilters = forwardRef<HTMLInputElement, Props>(
         <div className="flex flex-wrap items-center gap-2">
           {PRESETS.map(p => {
             const on = filters.presets.includes(p.id)
-            const disabled = p.id === 'mine' && !canFilterMine
             return (
               <button
                 key={p.id}
                 type="button"
-                disabled={disabled}
-                title={disabled ? 'ตั้งชื่อของคุณในหน้าตั้งค่าก่อน' : undefined}
                 onClick={() => togglePreset(p.id)}
                 className={
                   'rounded-chip border px-2.5 py-1 text-[13px] transition-colors ' +
                   (on
                     ? 'border-pine bg-pine/10 text-pine'
-                    : 'border-line bg-paper text-muted hover:text-ink') +
-                  (disabled ? ' cursor-not-allowed opacity-40' : '')
+                    : 'border-line bg-paper text-muted hover:text-ink')
                 }
               >
                 {p.label}

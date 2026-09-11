@@ -17,11 +17,15 @@ interface Props {
   onToggleExpand: () => void
   /** branch ของ session ที่เคยหยิบ defect นี้ไปแก้ */
   fixedIn?: string
+  /** ผู้ใช้ทำเครื่องหมายเองว่าแก้แล้ว — เก็บในเครื่อง ไม่เกี่ยวกับ status ใน tracker */
+  markedFixed: boolean
+  onToggleMarkedFixed: () => void
 }
 
 export function DefectRow({
   defect, workspaces, workspaceId, onWorkspaceChange,
   selected, selectable: withinQuota = true, onToggleSelect, expanded, onToggleExpand, fixedIn,
+  markedFixed, onToggleMarkedFixed,
 }: Props) {
   const severity = SEVERITY_STYLE[defect.severity]
   // ไม่รู้ว่าจะให้แก้ที่ repo ไหน ก็เลือกไปแก้ไม่ได้
@@ -49,9 +53,7 @@ export function DefectRow({
           {selected ? '✓' : ''}
         </button>
 
-        <span className="shrink-0 font-mono text-[13px] font-medium">{defect.key}</span>
-
-        {/* title กินที่ที่เหลือทั้งหมด — หลาย defect ขึ้นต้นเหมือนกัน ตัดสั้นแล้วแยกไม่ออก */}
+        {/* ไม่แสดงรหัส — tracker ไม่ได้ใช้รหัสนั้นเรียกงาน คนอ่านจำจากวงเล็บหน้า title แทน */}
         <button
           type="button"
           onClick={onToggleExpand}
@@ -66,7 +68,7 @@ export function DefectRow({
           className="shrink-0 rounded-chip px-2 py-0.5 font-mono text-[11px]"
           style={{ color: severity.color, background: severity.background }}
         >
-          {defect.severity}
+          {defect.severityLabel ?? defect.severity}
         </span>
 
         <WorkspaceSelect workspaces={workspaces} value={workspaceId} onChange={onWorkspaceChange} />
@@ -78,11 +80,33 @@ export function DefectRow({
           {defect.reporter ? `เปิดโดย ${defect.reporter} · ` : ''}
           {relativeTime(defect.createdAt)}
         </span>
+        {defect.tags?.map(t => (
+          <span
+            key={t}
+            className="shrink-0 rounded-chip bg-surface px-2 py-0.5 font-mono text-[11px] text-muted"
+          >
+            {t}
+          </span>
+        ))}
         {fixedIn && (
           <span className="shrink-0 rounded-chip border border-hair px-2 py-0.5 text-[11px] text-faint">
             เคยแก้ใน <span className="font-mono">{fixedIn}</span>
           </span>
         )}
+        <button
+          type="button"
+          aria-pressed={markedFixed}
+          onClick={onToggleMarkedFixed}
+          title={markedFixed ? 'เอาเครื่องหมายออก' : 'ทำเครื่องหมายว่าแก้แล้ว'}
+          className={
+            'shrink-0 rounded-chip border px-2 py-0.5 text-[11px] transition-colors ' +
+            (markedFixed
+              ? 'border-pine bg-pine/10 text-pine'
+              : 'border-hair text-faint hover:text-ink')
+          }
+        >
+          {markedFixed ? '✓ แก้แล้ว' : 'แก้แล้ว'}
+        </button>
       </div>
 
       {expanded && (

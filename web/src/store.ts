@@ -10,6 +10,18 @@ const STATUS_POLL_MS = 5000
 
 const EMPTY_FACETS: Facets = { status: [], severity: [], assignee: [] }
 
+/** id ของ defect ที่ผู้ใช้ทำเครื่องหมายเองว่าแก้แล้ว — เก็บแค่ id ไว้ในเครื่อง ไม่ยุ่งกับ tracker */
+const MARKED_KEY = 'pat.markedFixed'
+
+function readMarked(): string[] {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(MARKED_KEY) ?? '[]')
+    return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === 'string') : []
+  } catch {
+    return [] // localStorage ปิดอยู่หรือค่าเสีย — ถือว่ายังไม่เคย mark อะไร ห้ามให้ทั้งหน้าพัง
+  }
+}
+
 /** ทำ index + นับ facet ตรงนี้ที่เดียว จะได้ทำครั้งเดียวต่อการโหลดหนึ่งครั้ง */
 function toDefectState(res: DefectListResponse) {
   const { defects, ...meta } = res
@@ -34,6 +46,8 @@ interface State {
   defectsLoading: boolean
   /** ยิงอยู่เบื้องหลังทั้งที่มีข้อมูลแสดงอยู่แล้ว — แค่ตัวบอกสถานะเล็กๆ ห้ามบล็อกจอ */
   defectsRefreshing: boolean
+  /** id ของ defect ที่ทำเครื่องหมายว่าแก้แล้ว อ่านจาก localStorage ตอนเปิดหน้า */
+  markedFixed: string[]
   myName: string | null
   protectedBranches: string[]
   sources: SourceConfig[]
@@ -44,6 +58,8 @@ interface State {
   flash: string | null
 
   setFlash: (message: string | null) => void
+  /** ติ๊ก/เอาติ๊กออกว่าแก้ defect นี้แล้ว */
+  toggleMarkedFixed: (id: string) => void
   bootstrap: () => Promise<void>
   /** force = ข้าม cache ยิงใหม่เลย (ปุ่มโหลดใหม่) */
   loadDefects: (force?: boolean) => Promise<void>
@@ -72,6 +88,7 @@ export const useStore = create<State>((set, get) => ({
   defectsError: null,
   defectsLoading: false,
   defectsRefreshing: false,
+  markedFixed: readMarked(),
   myName: null,
   protectedBranches: [],
   sources: [],
@@ -82,6 +99,18 @@ export const useStore = create<State>((set, get) => ({
 
   setFlash(message) {
     set({ flash: message })
+  },
+
+  toggleMarkedFixed(id) {
+    const next = get().markedFixed.includes(id)
+      ? get().markedFixed.filter(x => x !== id)
+      : [...get().markedFixed, id]
+    set({ markedFixed: next })
+    try {
+      localStorage.setItem(MARKED_KEY, JSON.stringify(next))
+    } catch {
+      // เขียนไม่ได้ (โหมดส่วนตัว/พื้นที่เต็ม) — ยังใช้ต่อได้ในรอบนี้ แค่ไม่ค้างข้ามรอบ
+    }
   },
 
   async bootstrap() {

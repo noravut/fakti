@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { IPty } from 'node-pty'
 import type {
   BranchChoice, BranchOwnership, Defect, DiffStat, DirtyStrategy, FeatureSpec, ServerMessage,
-  Session, SessionState, Workspace,
+  Session, SessionAgent, SessionState, Workspace,
 } from '@shared/types'
 import { isProtectedBranch, protectedBranchesFor, readSessions, writeSessions } from './config'
 import * as git from './git'
@@ -88,6 +88,18 @@ function looksLikeQuestion(tail: string): boolean {
   return /❯/.test(recent)
     || /\(y\/n\)/i.test(recent)
     || /^\s*Do you want/m.test(recent)
+    || /Would you like to (?:run|proceed|allow)/i.test(recent)
+}
+
+/**
+ * env ของ agent — ใช้ของ server ทั้งก้อน แต่ปลด NO_COLOR/FORCE_COLOR ที่ CLI ตัวแม่ (codex/claude)
+ * ตั้งไว้ตอนสั่ง `pnpm dev` ไม่งั้น agent คิดว่าปลายทางไม่รองรับสี แล้วพ่น output ขาวดำมาทั้งจอ
+ */
+function agentEnv(): Record<string, string> {
+  const env = { ...process.env, COLORTERM: 'truecolor' } as Record<string, string>
+  delete env.NO_COLOR
+  delete env.FORCE_COLOR
+  return env
 }
 
 export class SessionManager {
@@ -137,6 +149,7 @@ export class SessionManager {
 
   async create(input: {
     workspace: Workspace
+    agent?: SessionAgent
     defects: Defect[]
     branch: BranchChoice
     dirtyStrategy?: DirtyStrategy
@@ -172,6 +185,7 @@ export class SessionManager {
 
     const session: Session = {
       id: randomUUID(),
+      agent: input.agent ?? 'claude',
       workspaceId: workspace.id,
       branch: workingBranch,
       baseCommit,
@@ -317,21 +331,26 @@ export class SessionManager {
 
     const pty = loadPty()
 
+    // Codex รับ prompt ผ่าน argument เพื่อไม่ให้การพิมพ์ชนกับหน้าจอเริ่มต้น
+    excludeReportFiles(workspace.path)
+    const line = writeTaskFile(workspace.path, prompt)
+    const args = session.agent === 'codex' ? ['--no-alt-screen', line] : []
+
     let term: IPty
     try {
-      term = pty.spawn('claude', [], {
+      term = pty.spawn(session.agent, args, {
         name: 'xterm-256color',
         cols: DEFAULT_COLS,
         rows: DEFAULT_ROWS,
         cwd: workspace.path,
-        // ส่ง env ทั้งก้อน ไม่งั้น claude หา credential ใน ~/.claude ไม่เจอ
-        env: process.env as Record<string, string>,
+        // ใช้ credentials และการตั้งค่า CLI ของผู้ใช้ รวมถึง CODEX_HOME
+        env: agentEnv(),
       })
     } catch (err) {
       throw new HttpError(
         500,
-        `เปิด claude ไม่ได้: ${err instanceof Error ? err.message : String(err)}\n` +
-        'เช็คว่า claude อยู่ใน PATH แล้วลองใหม่',
+        `เปิด ${session.agent} ไม่ได้: ${err instanceof Error ? err.message : String(err)}\n` +
+        `เช็คว่า ${session.agent} อยู่ใน PATH และล็อกอินแล้ว จากนั้นลองใหม่`,
       )
     }
 
@@ -362,9 +381,7 @@ export class SessionManager {
     })
 
     // prompt ไปทางไฟล์ ส่งเข้า pty แค่บรรทัดเดียว — ดูเหตุผลใน core/prompt.ts
-    excludeReportFiles(workspace.path)
-    const line = writeTaskFile(workspace.path, prompt)
-    term.write(`${line}\r`)
+    if (session.agent === 'claude') term.write(`${line}\r`)
   }
 
   private appendBuffer(live: LiveSession, data: string): void {

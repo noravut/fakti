@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { DirtyConflict, QaPromptPayload, TaskPromptPayload } from '@shared/types'
+import { SESSION_AGENTS } from '@shared/types'
 import { readWorkspaces } from '../core/config'
 import * as git from '../core/git'
 import { buildFeaturePrompt, buildPrompt } from '../core/prompt'
@@ -26,6 +27,7 @@ const hasWork = (v: { defectIds: string[]; feature?: unknown }) => v.defectIds.l
 
 const createBody = z.object({
   workspaceId: z.string().min(1),
+  agent: z.enum(SESSION_AGENTS).default('claude'),
   defectIds: z.array(z.string().min(1)),
   feature: featureSpec.optional(),
   branch: branchChoice,
@@ -73,7 +75,7 @@ export function sessionRoutes(manager: SessionManager): Hono {
       // feature ไม่มี defect ให้ดึง — requirement มาครบในตัวอยู่แล้ว
       const defects = feature ? [] : await resolveDefects(workspace, defectIds)
       return c.json(
-        await manager.create({ workspace, defects, feature, branch, dirtyStrategy, prompt: parsed.data.prompt }),
+        await manager.create({ workspace, defects, feature, branch, dirtyStrategy, agent: parsed.data.agent, prompt: parsed.data.prompt }),
         201,
       )
     } catch (err) {
