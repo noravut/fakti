@@ -163,7 +163,9 @@ export function Toggle({
         (pressed ? on : 'border-line bg-paper text-muted hover:border-pine-line hover:text-ink ') +
         className
       }
-    />
+    >
+      {children}
+    </button>
   )
 }
 
